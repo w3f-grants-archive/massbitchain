@@ -15,11 +15,11 @@ use std::{sync::Arc, time::Duration};
 
 use crate::primitives::*;
 
-/// Local network runtime executor
-pub mod local {
-	pub use local_runtime::RuntimeApi;
+/// Devnet runtime executor
+pub mod devnet {
+	pub use devnet_runtime::RuntimeApi;
 
-	/// Local runtime executor.
+	/// Devnet runtime executor.
 	pub struct Executor;
 	impl sc_executor::NativeExecutionDispatch for Executor {
 		#[cfg(not(feature = "runtime-benchmarks"))]
@@ -29,11 +29,11 @@ pub mod local {
 		type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
 
 		fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-			local_runtime::api::dispatch(method, data)
+			devnet_runtime::api::dispatch(method, data)
 		}
 
 		fn native_version() -> sc_executor::NativeVersion {
-			local_runtime::native_version()
+			devnet_runtime::native_version()
 		}
 	}
 }
@@ -372,6 +372,6 @@ where
 	Ok(task_manager)
 }
 
-pub fn start_local_node(config: Configuration) -> Result<TaskManager, ServiceError> {
-	start_node_impl::<local_runtime::RuntimeApi, local::Executor>(config)
+pub fn start_devnet_node(config: Configuration) -> Result<TaskManager, ServiceError> {
+	start_node_impl::<devnet_runtime::RuntimeApi, devnet::Executor>(config)
 }

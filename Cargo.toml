@@ -5,7 +5,8 @@ members = [
 	"pallets/dapi",
 	"pallets/dapi-staking",
 	"pallets/validator-set",
-	"runtime/local",
+	"runtime/devnet",
+	"runtime/testnet",
 ]
 [profile.release]
 panic = "unwind"

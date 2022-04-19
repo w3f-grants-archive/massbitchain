@@ -1,6 +1,6 @@
-//! Local chain specifications.
+//! Devnet specifications.
 
-use local_runtime::{
+use devnet_runtime::{
 	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
 	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, ImOnlineConfig, SessionConfig,
 	SessionKeys, Signature, SudoConfig, SystemConfig, ValidatorSetConfig,
@@ -15,25 +15,9 @@ use sp_runtime::{
 	Perbill,
 };
 
-/// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
-pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
+use super::get_from_seed;
 
-/// Generate a crypto pair from seed.
-pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
-	TPublic::Pair::from_string(&format!("//{}", seed), None)
-		.expect("static values are valid; qed")
-		.public()
-}
-
-type AccountPublic = <Signature as Verify>::Signer;
-
-/// Generate an account ID from seed.
-pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
-where
-	AccountPublic: From<<TPublic::Pair as Pair>::Public>,
-{
-	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
-}
+pub type DevnetChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
 fn session_keys(aura: AuraId, grandpa: GrandpaId, im_online: ImOnlineId) -> SessionKeys {
 	SessionKeys { aura, grandpa, im_online }
@@ -48,17 +32,17 @@ pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId, ImOnl
 	)
 }
 
-/// Development config (single validator Alice)
-pub fn development_config() -> ChainSpec {
+///  Gen local chain specification
+pub fn get_chain_spec() -> DevnetChainSpec {
 	let mut properties = serde_json::map::Map::new();
-	properties.insert("tokenSymbol".into(), "MBTL".into());
+	properties.insert("tokenSymbol".into(), "MBTD".into());
 	properties.insert("tokenDecimals".into(), 18.into());
-	ChainSpec::from_genesis(
-		"Development",
-		"dev",
+	DevnetChainSpec::from_genesis(
+		"Devnet",
+		"devnet",
 		ChainType::Development,
 		move || {
-			testnet_genesis(
+			make_genesis(
 				// Initial PoA authorities
 				vec![authority_keys_from_seed("Alice")],
 				// Sudo account
@@ -84,7 +68,8 @@ pub fn development_config() -> ChainSpec {
 	)
 }
 
-fn testnet_genesis(
+/// Helper function to create GenesisConfig.
+fn make_genesis(
 	initial_authorities: Vec<(AccountId, AuraId, GrandpaId, ImOnlineId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
@@ -123,4 +108,14 @@ fn testnet_genesis(
 		sudo: SudoConfig { key: Some(root_key) },
 		dapi: DapiConfig { regulators: initial_regulators.iter().map(|x| x.clone()).collect() },
 	}
+}
+
+type AccountPublic = <Signature as Verify>::Signer;
+
+/// Generate an account ID from seed.
+pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
+	where
+		AccountPublic: From<<TPublic::Pair as Pair>::Public>,
+{
+	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
 }

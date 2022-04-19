@@ -52,7 +52,8 @@ sp-core = { git = "https://github.com/paritytech/substrate.git", branch = "polka
 jsonrpc-core = "18.0.0"
 
 # Massbit-specific dependencies
-local-runtime = { path = "../runtime/local", version = "0.1.0" }
+devnet-runtime = { path = "../runtime/devnet", version = "0.1.0" }
+testnet-runtime = { path = "../runtime/testnet", version = "0.1.0" }
 
 # frame dependencies
 frame-rpc-system = { package = "substrate-frame-rpc-system", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
@@ -77,6 +78,6 @@ default = [
 runtime-benchmarks = [
 	"frame-benchmarking",
 	"frame-benchmarking-cli",
-	"local-runtime/runtime-benchmarks",
+	"devnet-runtime/runtime-benchmarks",
 	"polkadot-cli/runtime-benchmarks",
 ]
