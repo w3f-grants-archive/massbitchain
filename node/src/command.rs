@@ -1,7 +1,7 @@
 use crate::{
 	chain_spec::{
 		self,
-		local::{self, development_config},
+		devnet,
 	},
 	cli::{Cli, Subcommand},
 	primitives::Block,
@@ -28,8 +28,8 @@ impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
 	Ok(match id {
-		"dev" => Box::new(development_config()),
-		path => Box::new(local::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
+		"dev" => Box::new(chain_spec::devnet::get_chain_spec()),
+		path => Box::new(devnet::DevnetChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 	})
 }
 
@@ -63,14 +63,13 @@ impl SubstrateCli for Cli {
 	}
 
 	fn native_runtime_version(_chain_spec: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
-		&local_runtime::VERSION
+		&devnet_runtime::VERSION
 	}
 }
 
 /// Parse and run command line arguments
 pub fn run() -> sc_cli::Result<()> {
 	let cli = Cli::from_args();
-
 	match &cli.subcommand {
 		Some(Subcommand::Key(cmd)) => cmd.run(&cli),
 		Some(Subcommand::BuildSpec(cmd)) => {
@@ -84,12 +83,12 @@ pub fn run() -> sc_cli::Result<()> {
 		#[cfg(feature = "frame-benchmarking")]
 		Some(Subcommand::Benchmark(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
-			runner.sync_run(|config| cmd.run::<Block, local::Executor>(config))
+			runner.sync_run(|config| cmd.run::<Block, devnet::Executor>(config))
 		},
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
-				service::start_local_node(config).map_err(sc_cli::Error::Service)
+				service::start_devnet_node(config).map_err(sc_cli::Error::Service)
 			})
 		},
 	}
