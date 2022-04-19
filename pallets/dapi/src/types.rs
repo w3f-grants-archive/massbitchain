@@ -34,6 +34,7 @@ pub struct Provider<AccountId, ChainId> {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProviderDeactivateReason {
 	BadPerformance { requests: u64, success_rate: u32, average_latency: u32 },
 	OutOfSync,

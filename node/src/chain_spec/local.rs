@@ -1,10 +1,11 @@
-//! Chain specifications.
+//! Local chain specifications.
 
 use local_runtime::{
 	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
-	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
-	SystemConfig,
+	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, ImOnlineConfig, SessionConfig,
+	SessionKeys, Signature, SudoConfig, SystemConfig, ValidatorSetConfig,
 };
+use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
@@ -13,8 +14,6 @@ use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	Perbill,
 };
-
-type AccountPublic = <Signature as Verify>::Signer;
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
@@ -26,6 +25,8 @@ pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Pu
 		.public()
 }
 
+type AccountPublic = <Signature as Verify>::Signer;
+
 /// Generate an account ID from seed.
 pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
 where
@@ -34,24 +35,35 @@ where
 	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
 }
 
-/// Generate an Aura authority key.
-pub fn authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) {
-	(get_from_seed::<AuraId>(s), get_from_seed::<GrandpaId>(s))
+fn session_keys(aura: AuraId, grandpa: GrandpaId, im_online: ImOnlineId) -> SessionKeys {
+	SessionKeys { aura, grandpa, im_online }
+}
+
+pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId, ImOnlineId) {
+	(
+		get_account_id_from_seed::<sr25519::Public>(s),
+		get_from_seed::<AuraId>(s),
+		get_from_seed::<GrandpaId>(s),
+		get_from_seed::<ImOnlineId>(s),
+	)
 }
 
 /// Development config (single validator Alice)
-pub fn development_config() -> Result<ChainSpec, String> {
+pub fn development_config() -> ChainSpec {
 	let mut properties = serde_json::map::Map::new();
-	properties.insert("tokenSymbol".into(), "MBT".into());
+	properties.insert("tokenSymbol".into(), "MBTL".into());
 	properties.insert("tokenDecimals".into(), 18.into());
-	Ok(ChainSpec::from_genesis(
+	ChainSpec::from_genesis(
 		"Development",
 		"dev",
 		ChainType::Development,
 		move || {
 			testnet_genesis(
+				// Initial PoA authorities
 				vec![authority_keys_from_seed("Alice")],
+				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
+				// Pre-funded accounts
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
@@ -69,11 +81,11 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		None,
 		Some(properties),
 		None,
-	))
+	)
 }
 
 fn testnet_genesis(
-	initial_authorities: Vec<(AuraId, GrandpaId)>,
+	initial_authorities: Vec<(AccountId, AuraId, GrandpaId, ImOnlineId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	initial_regulators: Vec<AccountId>,
@@ -94,24 +106,21 @@ fn testnet_genesis(
 				validators_percent: Perbill::zero(),
 			},
 		},
-		aura: AuraConfig {
-			authorities: initial_authorities.iter().map(|x| (x.0.clone())).collect(),
+		validator_set: ValidatorSetConfig {
+			initial_validators: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
 		},
-		grandpa: GrandpaConfig {
-			authorities: initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect(),
+		session: SessionConfig {
+			keys: initial_authorities
+				.iter()
+				.map(|x| {
+					(x.0.clone(), x.0.clone(), session_keys(x.1.clone(), x.2.clone(), x.3.clone()))
+				})
+				.collect::<Vec<_>>(),
 		},
+		aura: AuraConfig { authorities: vec![] },
+		grandpa: GrandpaConfig { authorities: vec![] },
+		im_online: ImOnlineConfig { keys: vec![] },
 		sudo: SudoConfig { key: Some(root_key) },
 		dapi: DapiConfig { regulators: initial_regulators.iter().map(|x| x.clone()).collect() },
-	}
-}
-
-#[cfg(test)]
-pub(crate) mod tests {
-	use super::*;
-	use sp_runtime::BuildStorage;
-
-	#[test]
-	fn test_create_development_chain_spec() {
-		development_config().build_storage().unwrap();
 	}
 }

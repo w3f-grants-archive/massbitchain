@@ -1,11 +1,11 @@
 [workspace]
 members = [
-    'node',
-    'pallets/block-reward',
-    'pallets/validator-set',
-    'pallets/dapi',
-    'pallets/dapi-staking',
-    'runtime/local',
+	"node",
+	"pallets/block-reward",
+	"pallets/dapi",
+	"pallets/dapi-staking",
+	"pallets/validator-set",
+	"runtime/local",
 ]
 [profile.release]
-panic = 'unwind'
+panic = "unwind"
