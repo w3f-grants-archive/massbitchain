@@ -28,6 +28,9 @@ sp-consensus-aura = { git = "https://github.com/paritytech/substrate.git", branc
 sp-finality-grandpa = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
 sp-runtime = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
 sp-timestamp = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
+sp-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
+sp-offchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
 
 # client dependencies
 sc-basic-authorship = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }

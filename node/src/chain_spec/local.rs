@@ -1,4 +1,4 @@
-//! Chain specifications.
+//! Local chain specifications.
 
 use local_runtime::{
 	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
@@ -49,11 +49,11 @@ pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId, ImOnl
 }
 
 /// Development config (single validator Alice)
-pub fn development_config() -> Result<ChainSpec, String> {
+pub fn development_config() -> ChainSpec {
 	let mut properties = serde_json::map::Map::new();
-	properties.insert("tokenSymbol".into(), "MBT".into());
+	properties.insert("tokenSymbol".into(), "MBTL".into());
 	properties.insert("tokenDecimals".into(), 18.into());
-	Ok(ChainSpec::from_genesis(
+	ChainSpec::from_genesis(
 		"Development",
 		"dev",
 		ChainType::Development,
@@ -81,42 +81,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		None,
 		Some(properties),
 		None,
-	))
-}
-
-pub fn local_testnet_config() -> Result<ChainSpec, String> {
-	let mut properties = serde_json::map::Map::new();
-	properties.insert("tokenSymbol".into(), "MBT".into());
-	properties.insert("tokenDecimals".into(), 18.into());
-	Ok(ChainSpec::from_genesis(
-		"Development",
-		"dev",
-		ChainType::Development,
-		move || {
-			testnet_genesis(
-				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
-				// Sudo account
-				get_account_id_from_seed::<sr25519::Public>("Alice"),
-				// Pre-funded accounts
-				vec![
-					get_account_id_from_seed::<sr25519::Public>("Alice"),
-					get_account_id_from_seed::<sr25519::Public>("Bob"),
-					get_account_id_from_seed::<sr25519::Public>("Dave"),
-					get_account_id_from_seed::<sr25519::Public>("Charlie"),
-					get_account_id_from_seed::<sr25519::Public>("Eve"),
-					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
-				],
-				vec![get_account_id_from_seed::<sr25519::Public>("Ferdie")],
-			)
-		},
-		vec![],
-		None,
-		None,
-		None,
-		Some(properties),
-		None,
-	))
+	)
 }
 
 fn testnet_genesis(
@@ -157,16 +122,5 @@ fn testnet_genesis(
 		im_online: ImOnlineConfig { keys: vec![] },
 		sudo: SudoConfig { key: Some(root_key) },
 		dapi: DapiConfig { regulators: initial_regulators.iter().map(|x| x.clone()).collect() },
-	}
-}
-
-#[cfg(test)]
-pub(crate) mod tests {
-	use super::*;
-	use sp_runtime::BuildStorage;
-
-	#[test]
-	fn test_create_development_chain_spec() {
-		development_config().build_storage().unwrap();
 	}
 }

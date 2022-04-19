@@ -1,10 +1,37 @@
 use crate::{
+	chain_spec::{
+		self,
+		local::{self, development_config},
+	},
 	cli::{Cli, Subcommand},
-	local::{self, chain_spec, development_config, service},
 	primitives::Block,
 };
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
-use sc_service::PartialComponents;
+
+use super::service;
+
+trait IdentifyChain {
+	fn is_dev(&self) -> bool;
+}
+
+impl IdentifyChain for dyn sc_service::ChainSpec {
+	fn is_dev(&self) -> bool {
+		self.id().starts_with("dev")
+	}
+}
+
+impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
+	fn is_dev(&self) -> bool {
+		<dyn sc_service::ChainSpec>::is_dev(self)
+	}
+}
+
+fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
+	Ok(match id {
+		"dev" => Box::new(development_config()),
+		path => Box::new(local::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
+	})
+}
 
 impl SubstrateCli for Cli {
 	fn impl_name() -> String {
@@ -24,7 +51,7 @@ impl SubstrateCli for Cli {
 	}
 
 	fn support_url() -> String {
-		"https://github.com/massbitprotocol/massbit-verification/issue/new".into()
+		"https://github.com/massbitprotocol/massbitchain/issue/new".into()
 	}
 
 	fn copyright_start_year() -> i32 {
@@ -32,15 +59,11 @@ impl SubstrateCli for Cli {
 	}
 
 	fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
-		Ok(match id {
-			"dev" => Box::new(development_config()?),
-			path =>
-				Box::new(chain_spec::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
-		})
+		load_spec(id)
 	}
 
-	fn native_runtime_version(chain_spec: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
-		polkadot_cli::Cli::native_runtime_version(chain_spec)
+	fn native_runtime_version(_chain_spec: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
+		&local_runtime::VERSION
 	}
 }
 
@@ -54,47 +77,9 @@ pub fn run() -> sc_cli::Result<()> {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| cmd.run(config.chain_spec, config.network))
 		},
-		Some(Subcommand::CheckBlock(cmd)) => {
-			let runner = cli.create_runner(cmd)?;
-			runner.async_run(|config| {
-				let PartialComponents { client, task_manager, import_queue, .. } =
-					service::new_partial(&config)?;
-				Ok((cmd.run(client, import_queue), task_manager))
-			})
-		},
-		Some(Subcommand::ExportBlocks(cmd)) => {
-			let runner = cli.create_runner(cmd)?;
-			runner.async_run(|config| {
-				let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
-				Ok((cmd.run(client, config.database), task_manager))
-			})
-		},
-		Some(Subcommand::ExportState(cmd)) => {
-			let runner = cli.create_runner(cmd)?;
-			runner.async_run(|config| {
-				let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
-				Ok((cmd.run(client, config.chain_spec), task_manager))
-			})
-		},
-		Some(Subcommand::ImportBlocks(cmd)) => {
-			let runner = cli.create_runner(cmd)?;
-			runner.async_run(|config| {
-				let PartialComponents { client, task_manager, import_queue, .. } =
-					service::new_partial(&config)?;
-				Ok((cmd.run(client, import_queue), task_manager))
-			})
-		},
 		Some(Subcommand::PurgeChain(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| cmd.run(config.database))
-		},
-		Some(Subcommand::Revert(cmd)) => {
-			let runner = cli.create_runner(cmd)?;
-			runner.async_run(|config| {
-				let PartialComponents { client, task_manager, backend, .. } =
-					service::new_partial(&config)?;
-				Ok((cmd.run(client, backend), task_manager))
-			})
 		},
 		#[cfg(feature = "frame-benchmarking")]
 		Some(Subcommand::Benchmark(cmd)) => {
@@ -104,7 +89,7 @@ pub fn run() -> sc_cli::Result<()> {
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
-				local::start_node(config).map_err(sc_cli::Error::Service)
+				service::start_local_node(config).map_err(sc_cli::Error::Service)
 			})
 		},
 	}

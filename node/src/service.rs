@@ -1,67 +1,98 @@
-//! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
-
-use local_runtime::RuntimeApi;
 use sc_client_api::{BlockBackend, ExecutorProvider};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
-pub use sc_executor::NativeElseWasmExecutor;
-use sc_finality_grandpa::SharedVoterState;
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
+use sc_executor::NativeElseWasmExecutor;
+use sc_finality_grandpa::{GrandpaBlockImport, LinkHalf, SharedVoterState};
+use sc_service::{
+	error::Error as ServiceError, Configuration, PartialComponents, TFullBackend, TFullClient,
+	TaskManager,
+};
 use sc_telemetry::{Telemetry, TelemetryWorker};
+use sp_api::ConstructRuntimeApi;
 use sp_consensus::SlotData;
-use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
+use sp_consensus_aura::sr25519::{AuthorityId as AuraId, AuthorityPair as AuraPair};
+use sp_runtime::{traits::BlakeTwo256, OpaqueExtrinsic};
 use std::{sync::Arc, time::Duration};
 
 use crate::primitives::*;
 
-/// Local runtime native executor.
-pub struct Executor;
+/// Local network runtime executor
+pub mod local {
+	pub use local_runtime::RuntimeApi;
 
-impl sc_executor::NativeExecutionDispatch for Executor {
-	#[cfg(not(feature = "runtime-benchmarks"))]
-	type ExtendHostFunctions = ();
+	/// Local runtime executor.
+	pub struct Executor;
+	impl sc_executor::NativeExecutionDispatch for Executor {
+		#[cfg(not(feature = "runtime-benchmarks"))]
+		type ExtendHostFunctions = ();
 
-	#[cfg(feature = "runtime-benchmarks")]
-	type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
+		#[cfg(feature = "runtime-benchmarks")]
+		type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
 
-	fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-		local_runtime::api::dispatch(method, data)
-	}
+		fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
+			local_runtime::api::dispatch(method, data)
+		}
 
-	fn native_version() -> sc_executor::NativeVersion {
-		local_runtime::native_version()
+		fn native_version() -> sc_executor::NativeVersion {
+			local_runtime::native_version()
+		}
 	}
 }
 
-type FullClient = sc_service::TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>;
-type FullBackend = sc_service::TFullBackend<Block>;
-type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
-
-pub fn new_partial(
+pub fn new_partial<RuntimeApi, Executor>(
 	config: &Configuration,
 ) -> Result<
-	sc_service::PartialComponents<
-		FullClient,
-		FullBackend,
-		FullSelectChain,
-		sc_consensus::DefaultImportQueue<Block, FullClient>,
-		sc_transaction_pool::FullPool<Block, FullClient>,
+	PartialComponents<
+		TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>,
+		TFullBackend<Block>,
+		sc_consensus::LongestChain<TFullBackend<Block>, Block>,
+		sc_consensus::DefaultImportQueue<
+			Block,
+			TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>,
+		>,
+		sc_transaction_pool::FullPool<
+			Block,
+			TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>,
+		>,
 		(
-			sc_finality_grandpa::GrandpaBlockImport<
-				FullBackend,
+			GrandpaBlockImport<
+				TFullBackend<Block>,
 				Block,
-				FullClient,
-				FullSelectChain,
+				TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>,
+				sc_consensus::LongestChain<TFullBackend<Block>, Block>,
 			>,
-			sc_finality_grandpa::LinkHalf<Block, FullClient, FullSelectChain>,
+			LinkHalf<
+				Block,
+				TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>,
+				sc_consensus::LongestChain<TFullBackend<Block>, Block>,
+			>,
 			Option<Telemetry>,
 		),
 	>,
 	ServiceError,
-> {
-	if config.keystore_remote.is_some() {
-		return Err(ServiceError::Other("Remote Keystores are not supported.".into()))
-	}
-
+>
+where
+	RuntimeApi: ConstructRuntimeApi<Block, TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>>
+		+ Send
+		+ Sync
+		+ 'static,
+	RuntimeApi::RuntimeApi: sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block>
+		+ sp_api::Metadata<Block>
+		+ sp_session::SessionKeys<Block>
+		+ sp_api::ApiExt<
+			Block,
+			StateBackend = sc_client_api::StateBackendFor<TFullBackend<Block>, Block>,
+		> + sp_offchain::OffchainWorkerApi<Block>
+		+ sp_block_builder::BlockBuilder<Block>
+		+ sp_consensus_aura::AuraApi<Block, AuraId>
+		+ sp_finality_grandpa::GrandpaApi<
+			sp_runtime::generic::Block<
+				sp_runtime::generic::Header<u32, BlakeTwo256>,
+				OpaqueExtrinsic,
+			>,
+		>,
+	sc_client_api::StateBackendFor<TFullBackend<Block>, Block>: sp_api::StateBackend<BlakeTwo256>,
+	Executor: sc_executor::NativeExecutionDispatch + 'static,
+{
 	let telemetry = config
 		.telemetry_endpoints
 		.clone()
@@ -149,8 +180,31 @@ pub fn new_partial(
 	})
 }
 
-/// Builds a new service.
-pub fn start_node(config: Configuration) -> Result<TaskManager, ServiceError> {
+fn start_node_impl<RuntimeApi, Executor>(config: Configuration) -> Result<TaskManager, ServiceError>
+where
+	RuntimeApi: ConstructRuntimeApi<Block, TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>>
+		+ Send
+		+ Sync
+		+ 'static,
+	RuntimeApi::RuntimeApi: sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block>
+		+ sp_api::Metadata<Block>
+		+ sp_session::SessionKeys<Block>
+		+ sp_api::ApiExt<
+			Block,
+			StateBackend = sc_client_api::StateBackendFor<TFullBackend<Block>, Block>,
+		> + sp_offchain::OffchainWorkerApi<Block>
+		+ sp_block_builder::BlockBuilder<Block>
+		+ sp_consensus_aura::AuraApi<Block, AuraId>
+		+ sp_finality_grandpa::GrandpaApi<
+			sp_runtime::generic::Block<
+				sp_runtime::generic::Header<u32, BlakeTwo256>,
+				OpaqueExtrinsic,
+			>,
+		> + frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+		+ pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
+	sc_client_api::StateBackendFor<TFullBackend<Block>, Block>: sp_api::StateBackend<BlakeTwo256>,
+	Executor: sc_executor::NativeExecutionDispatch + 'static,
+{
 	let sc_service::PartialComponents {
 		client,
 		backend,
@@ -160,7 +214,7 @@ pub fn start_node(config: Configuration) -> Result<TaskManager, ServiceError> {
 		select_chain,
 		transaction_pool,
 		other: (block_import, grandpa_link, mut telemetry),
-	} = new_partial(&config)?;
+	} = new_partial::<RuntimeApi, Executor>(&config)?;
 
 	let protocol_name = sc_finality_grandpa::protocol_standard_name(
 		&client.block_hash(0).ok().flatten().expect("Genesis block exists; qed"),
@@ -245,10 +299,10 @@ pub fn start_node(config: Configuration) -> Result<TaskManager, ServiceError> {
 					let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
 					let slot =
-                        sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_duration(
-                            *timestamp,
-                            raw_slot_duration,
-                        );
+						sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_duration(
+							*timestamp,
+							raw_slot_duration,
+						);
 
 					Ok((timestamp, slot))
 				},
@@ -316,4 +370,8 @@ pub fn start_node(config: Configuration) -> Result<TaskManager, ServiceError> {
 
 	network_starter.start_network();
 	Ok(task_manager)
+}
+
+pub fn start_local_node(config: Configuration) -> Result<TaskManager, ServiceError> {
+	start_node_impl::<local_runtime::RuntimeApi, local::Executor>(config)
 }

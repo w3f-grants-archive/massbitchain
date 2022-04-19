@@ -3920,8 +3920,11 @@ dependencies = [
  "sp-consensus-aura",
  "sp-core",
  "sp-finality-grandpa",
+ "sp-offchain",
  "sp-runtime",
+ "sp-session",
  "sp-timestamp",
+ "sp-transaction-pool",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
 ]
