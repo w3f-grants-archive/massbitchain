@@ -1,390 +1,324 @@
+//! # Validator Set Pallet
+//!
+//! The Validator Set Pallet allows addition and removal of
+//! authorities/validators via extrinsics (transaction calls), in
+//! Substrate-based PoA networks. It also integrates with the im-online pallet
+//! to automatically remove offline validators.
+//!
+//! The pallet uses the Session pallet and implements related traits for session
+//! management. Currently it uses periodic session rotation provided by the
+//! session pallet to automatically rotate sessions. For this reason, the validator addition and
+//! removal becomes effective only after 2 sessions (queuing + applying).
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
 
+use frame_support::{
+	ensure,
+	pallet_prelude::*,
+	traits::{EstimateNextSessionRotation, Get, ValidatorSet, ValidatorSetWithIdentification},
+};
+use log;
+use sp_runtime::traits::{Convert, Zero};
+use sp_staking::{
+	offence::{Offence, OffenceError, ReportOffence},
+	SessionIndex,
+};
+use sp_std::{collections::btree_set::BTreeSet, prelude::*};
+
+pub const LOG_TARGET: &'static str = "runtime::validator-set";
+
 #[frame_support::pallet]
 pub mod pallet {
-	use core::ops::Div;
-	use frame_support::{
-		dispatch::DispatchResultWithPostInfo,
-		inherent::Vec,
-		pallet_prelude::*,
-		sp_runtime::{
-			traits::{AccountIdConversion, CheckedSub, Saturating, Zero},
-			RuntimeDebug,
-		},
-		traits::{
-			Currency, EnsureOrigin, ExistenceRequirement::KeepAlive, LockIdentifier,
-			LockableCurrency, ValidatorRegistration, WithdrawReasons,
-		},
-		weights::DispatchClass,
-		PalletId,
-	};
-	use frame_system::{pallet_prelude::*, Config as SystemConfig};
-	use pallet_session::SessionManager;
-	use sp_runtime::traits::Convert;
-	use sp_staking::SessionIndex;
-
-	type BalanceOf<T> =
-		<<T as Config>::Currency as Currency<<T as SystemConfig>::AccountId>>::Balance;
-
-	const VALIDATOR_STAKING_ID: LockIdentifier = *b"valstake";
-
-	/// A convertor from validators id. Since this pallet does not have stash/controller, this is
-	/// just identity.
-	pub struct IdentityValidator;
-	impl<T> sp_runtime::traits::Convert<T, Option<T>> for IdentityValidator {
-		fn convert(t: T) -> Option<T> {
-			Some(t)
-		}
-	}
-	/// Basic information about a collation candidate.
-	#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, scale_info::TypeInfo)]
-	pub struct CandidateInfo<AccountId, Balance> {
-		/// Account identifier.
-		pub who: AccountId,
-		/// Reserved deposit.
-		pub deposit: Balance,
-	}
+	use super::*;
+	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(PhantomData<T>);
 
-	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
-		/// Overarching event type.
+	pub trait Config: frame_system::Config + pallet_session::Config {
+		type AddRemoveOrigin: EnsureOrigin<Self::Origin>;
+
+		type MinAuthorities: Get<u32>;
+
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-
-		/// The currency mechanism.
-		type Currency: LockableCurrency<Self::AccountId>;
-
-		/// Origin that can dictate updating parameters of this pallet.
-		type UpdateOrigin: EnsureOrigin<Self::Origin>;
-
-		/// Account Identifier from which the internal Pot is generated.
-		type PotId: Get<PalletId>;
-
-		/// Maximum number of candidates that we should have. This is used for benchmarking and is
-		/// not enforced.
-		///
-		/// This does not take into account the invulnerables.
-		type MaxCandidates: Get<u32>;
-
-		/// Minimum number of candidates that we should have. This is used for disaster recovery.
-		///
-		/// This does not take into account the invulnerables.
-		type MinCandidates: Get<u32>;
-
-		/// Maximum number of invulnerables.
-		///
-		/// Used only for benchmarking.
-		type MaxInvulnerables: Get<u32>;
-
-		// Will be kicked if block is not produced in threshold.
-		type KickThreshold: Get<Self::BlockNumber>;
-
-		/// A stable ID for a validator.
-		type ValidatorId: Member + Parameter;
-
-		/// A conversion from account ID to validator ID.
-		///
-		/// Its cost must be at most one storage read.
-		type ValidatorIdOf: Convert<Self::AccountId, Option<Self::ValidatorId>>;
-
-		/// Validate a user is registered
-		type ValidatorRegistration: ValidatorRegistration<Self::ValidatorId>;
 	}
 
-	/// The invulnerable, fixed validators.
 	#[pallet::storage]
-	#[pallet::getter(fn invulnerables)]
-	pub type Invulnerables<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+	#[pallet::getter(fn validators)]
+	pub type Validators<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
-	/// The (community, limited) collation candidates.
 	#[pallet::storage]
-	#[pallet::getter(fn candidates)]
-	pub type Candidates<T: Config> =
-		StorageValue<_, Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>, ValueQuery>;
+	#[pallet::getter(fn approved_validators)]
+	pub type ApprovedValidators<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
-	/// Last block authored by validator.
 	#[pallet::storage]
-	#[pallet::getter(fn last_authored_block)]
-	pub type LastAuthoredBlock<T: Config> =
-		StorageMap<_, Twox64Concat, T::AccountId, T::BlockNumber, ValueQuery>;
+	#[pallet::getter(fn offline_validators)]
+	pub type OfflineValidators<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
-	/// Desired number of candidates.
-	///
-	/// This should ideally always be less than [`Config::MaxCandidates`] for weights to be correct.
-	#[pallet::storage]
-	#[pallet::getter(fn desired_candidates)]
-	pub type DesiredCandidates<T> = StorageValue<_, u32, ValueQuery>;
+	#[pallet::event]
+	#[pallet::generate_deposit(pub(super) fn deposit_event)]
+	pub enum Event<T: Config> {
+		/// New validator addition initiated. Effective in ~2 sessions.
+		ValidatorAdditionInitiated { validator_id: T::AccountId },
+		/// Validator removal initiated. Effective in ~2 sessions.
+		ValidatorRemovalInitiated { validator_id: T::AccountId },
+	}
 
-	/// Fixed deposit bond for each candidate.
-	#[pallet::storage]
-	#[pallet::getter(fn candidacy_bond)]
-	pub type CandidacyBond<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+	#[pallet::error]
+	pub enum Error<T> {
+		/// Target (post-removal) validator count is below the minimum.
+		TooLowValidatorCount,
+		/// Validator is already in the validator set.
+		Duplicate,
+		/// Validator is not approved for re-addition.
+		ValidatorNotApproved,
+		/// Only the validator can add itself back after coming online.
+		BadOrigin,
+	}
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
-		pub invulnerables: Vec<T::AccountId>,
-		pub candidacy_bond: BalanceOf<T>,
-		pub desired_candidates: u32,
+		pub initial_validators: Vec<T::AccountId>,
 	}
 
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self {
-				invulnerables: Default::default(),
-				candidacy_bond: Default::default(),
-				desired_candidates: Default::default(),
-			}
+			Self { initial_validators: Default::default() }
 		}
 	}
 
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			let duplicate_invulnerables =
-				self.invulnerables.iter().collect::<std::collections::BTreeSet<_>>();
-			assert_eq!(
-				duplicate_invulnerables.len(),
-				self.invulnerables.len(),
-				"duplicate invulnerables in genesis."
-			);
-
-			assert!(
-				T::MaxInvulnerables::get() >= (self.invulnerables.len() as u32),
-				"genesis invulnerables are more than T::MaxInvulnerables",
-			);
-			assert!(
-				T::MaxCandidates::get() >= self.desired_candidates,
-				"genesis desired_candidates are more than T::MaxCandidates",
-			);
-
-			<DesiredCandidates<T>>::put(&self.desired_candidates);
-			<CandidacyBond<T>>::put(&self.candidacy_bond);
-			<Invulnerables<T>>::put(&self.invulnerables);
+			Pallet::<T>::initialize_validators(&self.initial_validators);
 		}
 	}
-
-	#[pallet::event]
-	#[pallet::generate_deposit(pub(super) fn deposit_event)]
-	pub enum Event<T: Config> {
-		NewInvulnerables { invulnerables: Vec<T::AccountId> },
-		NewDesiredCandidates(u32),
-		NewCandidacyBond(BalanceOf<T>),
-		CandidateAdded(T::AccountId, BalanceOf<T>),
-		CandidateRemoved(T::AccountId),
-	}
-
-	#[pallet::error]
-	pub enum Error<T> {
-		/// Too many candidates
-		TooManyCandidates,
-		/// Too few candidates
-		TooFewCandidates,
-		/// Unknown error
-		Unknown,
-		/// Permission issue
-		Permission,
-		/// User is already a candidate
-		AlreadyCandidate,
-		/// User is not a candidate
-		NotCandidate,
-		/// User is already an Invulnerable
-		AlreadyInvulnerable,
-		/// Account has no associated validator ID
-		NoAssociatedValidatorId,
-		/// Validator ID is not yet registered
-		ValidatorNotRegistered,
-		/// Free balance is too low for onboard
-		TooLowFreeBalance,
-	}
-
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(100)]
-		pub fn set_invulnerables(
-			origin: OriginFor<T>,
-			invulnerables: Vec<T::AccountId>,
-		) -> DispatchResultWithPostInfo {
-			T::UpdateOrigin::ensure_origin(origin)?;
-			// we trust origin calls, this is just a for more accurate benchmarking
-			if (invulnerables.len() as u32) > T::MaxInvulnerables::get() {
-				log::warn!(
-					"invulnerables > T::MaxInvulnerables; you might need to run benchmarks again"
-				);
-			}
-			<Invulnerables<T>>::put(&invulnerables);
-			Self::deposit_event(Event::NewInvulnerables { invulnerables });
-			Ok(().into())
-		}
-
-		#[pallet::weight(100)]
-		pub fn register_as_candidate(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-
-			// ensure we are below limit.
-			let length = <Candidates<T>>::decode_len().unwrap_or_default();
-			ensure!((length as u32) < Self::desired_candidates(), Error::<T>::TooManyCandidates);
-			ensure!(!Self::invulnerables().contains(&who), Error::<T>::AlreadyInvulnerable);
-
-			let validator_key = T::ValidatorIdOf::convert(who.clone())
-				.ok_or(Error::<T>::NoAssociatedValidatorId)?;
-			ensure!(
-				T::ValidatorRegistration::is_registered(&validator_key),
-				Error::<T>::ValidatorNotRegistered
-			);
-
-			let deposit = Self::candidacy_bond();
-
-			let free_balance = T::Currency::free_balance(&who);
-			ensure!(free_balance > deposit, Error::<T>::TooLowFreeBalance);
-
-			// First authored block is current block plus kick threshold to handle session delay
-			let incoming = CandidateInfo { who: who.clone(), deposit };
-
-			let current_count =
-				<Candidates<T>>::try_mutate(|candidates| -> Result<usize, DispatchError> {
-					if candidates.into_iter().any(|candidate| candidate.who == who) {
-						Err(Error::<T>::AlreadyCandidate)?
-					} else {
-						T::Currency::set_lock(
-							VALIDATOR_STAKING_ID,
-							&who,
-							deposit,
-							WithdrawReasons::all(),
-						);
-						candidates.push(incoming);
-						<LastAuthoredBlock<T>>::insert(
-							who.clone(),
-							frame_system::Pallet::<T>::block_number() + T::KickThreshold::get(),
-						);
-						Ok(candidates.len())
-					}
-				})?;
-
-			Self::deposit_event(Event::CandidateAdded(who, deposit));
-			Ok(().into())
-		}
-	}
-
-	impl<T: Config> Pallet<T> {
-		/// Get a unique, inaccessible account id from the `PotId`.
-		pub fn account_id() -> T::AccountId {
-			T::PotId::get().into_account()
-		}
-
-		/// Removes a candidate if they exist and sends them back their deposit
-		fn try_remove_candidate(who: &T::AccountId) -> Result<usize, DispatchError> {
-			let current_count =
-				<Candidates<T>>::try_mutate(|candidates| -> Result<usize, DispatchError> {
-					let index = candidates
-						.iter()
-						.position(|candidate| candidate.who == *who)
-						.ok_or(Error::<T>::NotCandidate)?;
-					T::Currency::remove_lock(VALIDATOR_STAKING_ID, &who);
-					candidates.remove(index);
-					<LastAuthoredBlock<T>>::remove(who.clone());
-					Ok(candidates.len())
-				})?;
-			Self::deposit_event(Event::CandidateRemoved(who.clone()));
-			Ok(current_count)
-		}
-
-		/// Assemble the current set of candidates and invulnerables into the next validator set.
+		/// Add a new validator.
 		///
-		/// This is done on the fly, as frequent as we are told to do so, as the session manager.
-		pub fn assemble_validators(candidates: Vec<T::AccountId>) -> Vec<T::AccountId> {
-			let mut validators = Self::invulnerables();
-			validators.extend(candidates.into_iter().collect::<Vec<_>>());
-			validators
+		/// New validator's session keys should be set in Session pallet before
+		/// calling this.
+		///
+		/// The origin can be configured using the `AddRemoveOrigin` type in the
+		/// host runtime. Can also be set to sudo/root.
+		#[pallet::weight(0)]
+		pub fn add_validator(origin: OriginFor<T>, validator_id: T::AccountId) -> DispatchResult {
+			T::AddRemoveOrigin::ensure_origin(origin)?;
+
+			Self::do_add_validator(validator_id.clone())?;
+			Self::approve_validator(validator_id)?;
+
+			Ok(())
 		}
 
-		/// Kicks out and candidates that did not produce a block in the kick threshold.
-		pub fn kick_stale_candidates(
-			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
-		) -> Vec<T::AccountId> {
-			let now = frame_system::Pallet::<T>::block_number();
-			let kick_threshold = T::KickThreshold::get();
-			let new_candidates = candidates
-				.into_iter()
-				.filter_map(|c| {
-					let last_block = <LastAuthoredBlock<T>>::get(&c.who);
-					let since_last = now.saturating_sub(last_block);
-					if since_last < kick_threshold ||
-						Self::candidates().len() as u32 <= T::MinCandidates::get()
-					{
-						Some(c.who)
-					} else {
-						let outcome = Self::try_remove_candidate(&c.who);
-						if let Err(why) = outcome {
-							log::warn!("Failed to remove candidate {:?}", why);
-							debug_assert!(false, "failed to remove candidate {:?}", why);
-						}
-						None
-					}
-				})
-				.collect::<Vec<_>>();
-			new_candidates
-		}
-	}
+		/// Remove a validator.
+		///
+		/// The origin can be configured using the `AddRemoveOrigin` type in the
+		/// host runtime. Can also be set to sudo/root.
+		#[pallet::weight(0)]
+		pub fn remove_validator(
+			origin: OriginFor<T>,
+			validator_id: T::AccountId,
+		) -> DispatchResult {
+			T::AddRemoveOrigin::ensure_origin(origin)?;
 
-	/// Keep track of number of authored blocks per authority, uncles are counted as well since
-	/// they're a valid proof of being online.
-	impl<T: Config + pallet_authorship::Config>
-		pallet_authorship::EventHandler<T::AccountId, T::BlockNumber> for Pallet<T>
-	{
-		fn note_author(author: T::AccountId) {
-			let pot = Self::account_id();
-			// assumes an ED will be sent to pot.
-			let reward = T::Currency::free_balance(&pot)
-				.checked_sub(&T::Currency::minimum_balance())
-				.unwrap_or_else(Zero::zero)
-				.div(2u32.into());
-			// `reward` is half of pot account minus ED, this should never fail.
-			let _success = T::Currency::transfer(&pot, &author, reward, KeepAlive);
-			debug_assert!(_success.is_ok());
-			<LastAuthoredBlock<T>>::insert(author, frame_system::Pallet::<T>::block_number());
+			Self::do_remove_validator(validator_id.clone())?;
+			Self::unapprove_validator(validator_id)?;
+
+			Ok(())
 		}
 
-		fn note_uncle(_: T::AccountId, _: T::BlockNumber) {
-			// temporarily ignore this.
+		/// Add an approved validator again when it comes back online.
+		///
+		/// For this call, the dispatch origin must be the validator itself.
+		#[pallet::weight(0)]
+		pub fn add_validator_again(
+			origin: OriginFor<T>,
+			validator_id: T::AccountId,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			ensure!(who == validator_id, Error::<T>::BadOrigin);
+
+			let approved_set: BTreeSet<_> = <ApprovedValidators<T>>::get().into_iter().collect();
+			ensure!(approved_set.contains(&validator_id), Error::<T>::ValidatorNotApproved);
+
+			Self::do_add_validator(validator_id)?;
+
+			Ok(())
 		}
 	}
+}
 
-	/// Play the role of the session manager.
-	impl<T: Config> SessionManager<T::AccountId> for Pallet<T> {
-		fn new_session(index: SessionIndex) -> Option<Vec<T::AccountId>> {
-			log::info!(
-				"assembling new validators for new session {} at #{:?}",
-				index,
-				<frame_system::Pallet<T>>::block_number(),
-			);
+impl<T: Config> Pallet<T> {
+	fn initialize_validators(validators: &[T::AccountId]) {
+		assert!(
+			validators.len() as u32 >= T::MinAuthorities::get(),
+			"Initial set of validators must be at least T::MinAuthorities"
+		);
+		assert!(<Validators<T>>::get().is_empty(), "Validators are already initialized!");
 
-			let candidates = Self::candidates();
-			let candidates_len_before = candidates.len();
-			let active_candidates = Self::kick_stale_candidates(candidates);
-			let active_candidates_len = active_candidates.len();
-			let result = Self::assemble_validators(active_candidates);
-			let removed = candidates_len_before - active_candidates_len;
+		<Validators<T>>::put(validators);
+		<ApprovedValidators<T>>::put(validators);
+	}
 
-			Some(result)
+	fn do_add_validator(validator_id: T::AccountId) -> DispatchResult {
+		let validator_set: BTreeSet<_> = <Validators<T>>::get().into_iter().collect();
+		ensure!(!validator_set.contains(&validator_id), Error::<T>::Duplicate);
+		<Validators<T>>::mutate(|v| v.push(validator_id.clone()));
+
+		Self::deposit_event(Event::ValidatorAdditionInitiated { validator_id });
+		log::debug!(target: LOG_TARGET, "Validator addition initiated.");
+
+		Ok(())
+	}
+
+	fn do_remove_validator(validator_id: T::AccountId) -> DispatchResult {
+		let mut validators = <Validators<T>>::get();
+
+		// Ensuring that the post removal, target validator count doesn't go below the minimum.
+		ensure!(
+			validators.len().saturating_sub(1) as u32 >= T::MinAuthorities::get(),
+			Error::<T>::TooLowValidatorCount
+		);
+
+		validators.retain(|v| *v != validator_id);
+		<Validators<T>>::put(validators);
+
+		Self::deposit_event(Event::ValidatorRemovalInitiated { validator_id });
+		log::debug!(target: LOG_TARGET, "Validator removal initiated.");
+
+		Ok(())
+	}
+
+	fn approve_validator(validator_id: T::AccountId) -> DispatchResult {
+		let approved_set: BTreeSet<_> = <ApprovedValidators<T>>::get().into_iter().collect();
+		ensure!(!approved_set.contains(&validator_id), Error::<T>::Duplicate);
+		<ApprovedValidators<T>>::mutate(|v| v.push(validator_id.clone()));
+		Ok(())
+	}
+
+	fn unapprove_validator(validator_id: T::AccountId) -> DispatchResult {
+		let mut approved_set = <ApprovedValidators<T>>::get();
+		approved_set.retain(|v| *v != validator_id);
+		Ok(())
+	}
+
+	// Adds offline validators to a local cache for removal at new session.
+	fn mark_for_removal(validator_id: T::AccountId) {
+		<OfflineValidators<T>>::mutate(|v| v.push(validator_id));
+		log::debug!(target: LOG_TARGET, "Offline validator marked for auto removal.");
+	}
+
+	// Removes offline validators from the validator set and clears the offline
+	// cache. It is called in the session change hook and removes the validators
+	// who were reported offline during the session that is ending. We do not
+	// check for `MinAuthorities` here, because the offline validators will not
+	// produce blocks and will have the same overall effect on the runtime.
+	fn remove_offline_validators() {
+		let validators_to_remove: BTreeSet<_> = <OfflineValidators<T>>::get().into_iter().collect();
+
+		// Delete from active validator set.
+		<Validators<T>>::mutate(|vs| vs.retain(|v| !validators_to_remove.contains(v)));
+		log::debug!(
+			target: LOG_TARGET,
+			"Initiated removal of {:?} offline validators.",
+			validators_to_remove.len()
+		);
+
+		// Clear the offline validator list to avoid repeated deletion.
+		<OfflineValidators<T>>::put(Vec::<T::AccountId>::new());
+	}
+}
+
+// Provides the new set of validators to the session module when session is
+// being rotated.
+impl<T: Config> pallet_session::SessionManager<T::AccountId> for Pallet<T> {
+	fn new_session(_new_index: SessionIndex) -> Option<Vec<T::AccountId>> {
+		// Remove any offline validators. This will only work when the runtime
+		// also has the im-online pallet.
+		Self::remove_offline_validators();
+
+		log::debug!(target: LOG_TARGET, "New session called; updated validator set provided.");
+
+		Some(Self::validators())
+	}
+
+	fn end_session(_end_index: SessionIndex) {}
+
+	fn start_session(_start_index: SessionIndex) {}
+}
+
+impl<T: Config> EstimateNextSessionRotation<T::BlockNumber> for Pallet<T> {
+	fn average_session_length() -> T::BlockNumber {
+		Zero::zero()
+	}
+
+	fn estimate_current_session_progress(
+		_now: T::BlockNumber,
+	) -> (Option<sp_runtime::Permill>, frame_support::dispatch::Weight) {
+		(None, Zero::zero())
+	}
+
+	fn estimate_next_session_rotation(
+		_now: T::BlockNumber,
+	) -> (Option<T::BlockNumber>, frame_support::dispatch::Weight) {
+		(None, Zero::zero())
+	}
+}
+
+// Implementation of Convert trait for mapping ValidatorId with AccountId.
+pub struct ValidatorOf<T>(sp_std::marker::PhantomData<T>);
+
+impl<T: Config> Convert<T::ValidatorId, Option<T::ValidatorId>> for ValidatorOf<T> {
+	fn convert(account: T::ValidatorId) -> Option<T::ValidatorId> {
+		Some(account)
+	}
+}
+
+impl<T: Config> ValidatorSet<T::AccountId> for Pallet<T> {
+	type ValidatorId = T::ValidatorId;
+	type ValidatorIdOf = T::ValidatorIdOf;
+
+	fn session_index() -> sp_staking::SessionIndex {
+		pallet_session::Pallet::<T>::session_index()
+	}
+
+	fn validators() -> Vec<Self::ValidatorId> {
+		pallet_session::Pallet::<T>::validators()
+	}
+}
+
+impl<T: Config> ValidatorSetWithIdentification<T::AccountId> for Pallet<T> {
+	type Identification = T::ValidatorId;
+	type IdentificationOf = ValidatorOf<T>;
+}
+
+// Offence reporting and unresponsiveness management.
+impl<T: Config, O: Offence<(T::AccountId, T::AccountId)>>
+	ReportOffence<T::AccountId, (T::AccountId, T::AccountId), O> for Pallet<T>
+{
+	fn report_offence(_reporters: Vec<T::AccountId>, offence: O) -> Result<(), OffenceError> {
+		let offenders = offence.offenders();
+
+		for (v, _) in offenders.into_iter() {
+			Self::mark_for_removal(v);
 		}
 
-		fn end_session(_: SessionIndex) {
-			// we don't care.
-		}
+		Ok(())
+	}
 
-		fn start_session(_: SessionIndex) {
-			// we don't care.
-		}
+	fn is_known_offence(
+		_offenders: &[(T::AccountId, T::AccountId)],
+		_time_slot: &O::TimeSlot,
+	) -> bool {
+		false
 	}
 }
