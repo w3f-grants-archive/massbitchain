@@ -41,10 +41,13 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config + pallet_session::Config {
+		/// The origin which can add/remove validators.
 		type AddRemoveOrigin: EnsureOrigin<Self::Origin>;
 
+		/// Required minimum authorities for block production.
 		type MinAuthorities: Get<u32>;
 
+		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
 

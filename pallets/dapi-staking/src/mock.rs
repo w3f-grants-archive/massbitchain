@@ -137,16 +137,16 @@ impl pallet_dapi_staking::Config for TestRuntime {
 	type Event = Event;
 	type Currency = Balances;
 	type BlockPerEra = BlockPerEra;
-	type RegisterDeposit = RegisterDeposit;
-	type OperatorRewardPercentage = OperatorRewardPercentage;
+	type MinProviderStake = RegisterDeposit;
+	type ProviderCommission = OperatorRewardPercentage;
 	type ProviderId = MockProvider;
-	type MaxNumberOfStakersPerProvider = MaxNumberOfStakersPerProvider;
-	type MinimumStakingAmount = MinimumStakingAmount;
+	type MaxDelegatorsPerProvider = MaxNumberOfStakersPerProvider;
+	type MinDelegatorStake = MinimumStakingAmount;
 	type PalletId = DapiStakingPalletId;
-	type MinimumRemainingAmount = MinimumRemainingAmount;
+	type MinRemainingAmount = MinimumRemainingAmount;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
 	type UnbondingPeriod = UnbondingPeriod;
-	type MaxEraStakeValues = MaxEraStakeValues;
+	type MaxEraDelegationValues = MaxEraStakeValues;
 	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
 }
 

@@ -1,5 +1,3 @@
-//! Massbit node library.
-
 pub mod chain_spec;
 
 mod cli;

@@ -63,8 +63,8 @@ pub fn wasm_binary_unwrap() -> &'static [u8] {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("massbit-local"),
-	impl_name: create_runtime_str!("massbit-local"),
+	spec_name: create_runtime_str!("massbit-devnet"),
+	impl_name: create_runtime_str!("massbit-devnet"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 1,
@@ -82,8 +82,8 @@ impl_opaque_keys! {
 }
 
 /// Constant values used within the runtime.
-pub const MILLIMBT: Balance = 1_000_000_000_000_000;
-pub const MBT: Balance = 1_000 * MILLIMBT;
+pub const MILLIMBTD: Balance = 1_000_000_000_000_000;
+pub const MBTD: Balance = 1_000 * MILLIMBTD;
 
 /// This determines the average expected block time that we are targeting.
 /// Blocks will be produced at a minimum duration defined by `SLOT_DURATION`.
@@ -105,6 +105,8 @@ pub fn native_version() -> NativeVersion {
 	NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
 }
 
+/// We allow `Normal` extrinsics to fill up the block up to 75%, the rest can be used
+/// by operational extrinsics.
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
 parameter_types! {
@@ -259,9 +261,9 @@ parameter_types! {
 }
 
 impl pallet_validator_set::Config for Runtime {
-	type Event = Event;
 	type AddRemoveOrigin = EnsureRoot<AccountId>;
 	type MinAuthorities = MinAuthorities;
+	type Event = Event;
 }
 
 parameter_types! {
@@ -270,6 +272,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Runtime {
+	type Event = Event;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_validator_set::ValidatorOf<Self>;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
@@ -278,7 +281,6 @@ impl pallet_session::Config for Runtime {
 	type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = SessionKeys;
 	type WeightInfo = ();
-	type Event = Event;
 }
 
 parameter_types! {
@@ -339,15 +341,15 @@ where
 
 impl pallet_im_online::Config for Runtime {
 	type AuthorityId = ImOnlineId;
-	type Event = Event;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type ValidatorSet = ValidatorSet;
-	type ReportUnresponsiveness = ValidatorSet;
-	type UnsignedPriority = ImOnlineUnsignedPriority;
-	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 	type MaxKeys = MaxKeys;
 	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
 	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
+	type Event = Event;
+	type ValidatorSet = ValidatorSet;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type ReportUnresponsiveness = ValidatorSet;
+	type UnsignedPriority = ImOnlineUnsignedPriority;
+	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -358,17 +360,15 @@ type NegativeImbalance = <Balances as Currency<AccountId>>::NegativeImbalance;
 
 pub struct BeneficiaryPayout();
 impl pallet_block_reward::BeneficiaryPayout<NegativeImbalance> for BeneficiaryPayout {
-	fn validators(_: NegativeImbalance) {
-		// no validators for local dev node
-	}
+	fn validators(_: NegativeImbalance) {}
 
 	fn providers(reward: NegativeImbalance) {
-		DapiStaking::rewards(reward)
+		DapiStaking::handle_imbalance(reward)
 	}
 }
 
 parameter_types! {
-	pub const RewardAmount: Balance = 2_664 * MILLIMBT;
+	pub const RewardAmount: Balance = 2_000 * MILLIMBTD;
 }
 
 impl pallet_block_reward::Config for Runtime {
@@ -379,12 +379,12 @@ impl pallet_block_reward::Config for Runtime {
 }
 
 parameter_types! {
-	pub const BlockPerEra: BlockNumber = 200;
-	pub const RegisterDeposit: Balance = 90 * MBT;
+	pub const BlockPerEra: BlockNumber = 60;
+	pub const RegisterDeposit: Balance = 90 * MBTD;
 	pub const OperatorRewardPercentage: Perbill = Perbill::from_percent(80);
-	pub const MaxNumberOfStakersPerProvider: u32 = 512;
-	pub const MinimumStakingAmount: Balance = 10 * MBT;
-	pub const MinimumRemainingAmount: Balance = 1 * MBT;
+	pub const MaxNumberOfStakersPerProvider: u32 = 10;
+	pub const MinimumStakingAmount: Balance = 10 * MBTD;
+	pub const MinimumRemainingAmount: Balance = 1 * MBTD;
 	pub const MaxUnlockingChunks: u32 = 2;
 	pub const UnbondingPeriod: u32 = 2;
 	pub const MaxEraStakeValues: u32 = 5;
@@ -394,15 +394,15 @@ impl pallet_dapi_staking::Config for Runtime {
 	type Currency = Balances;
 	type ProviderId = MassbitId;
 	type BlockPerEra = BlockPerEra;
-	type OperatorRewardPercentage = OperatorRewardPercentage;
-	type RegisterDeposit = RegisterDeposit;
-	type MaxNumberOfStakersPerProvider = MaxNumberOfStakersPerProvider;
-	type MinimumStakingAmount = MinimumStakingAmount;
+	type ProviderCommission = OperatorRewardPercentage;
+	type MinProviderStake = RegisterDeposit;
+	type MaxDelegatorsPerProvider = MaxNumberOfStakersPerProvider;
+	type MinDelegatorStake = MinimumStakingAmount;
 	type PalletId = DapiStakingPalletId;
-	type MinimumRemainingAmount = MinimumRemainingAmount;
+	type MinRemainingAmount = MinimumRemainingAmount;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
 	type UnbondingPeriod = UnbondingPeriod;
-	type MaxEraStakeValues = MaxEraStakeValues;
+	type MaxEraDelegationValues = MaxEraStakeValues;
 	type Event = Event;
 	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<Runtime>;
 }
@@ -410,7 +410,7 @@ impl pallet_dapi_staking::Config for Runtime {
 pub struct OnProjectPayment;
 impl OnUnbalanced<NegativeImbalance> for OnProjectPayment {
 	fn on_nonzero_unbalanced(amount: NegativeImbalance) {
-		DapiStaking::rewards(amount);
+		DapiStaking::handle_imbalance(amount);
 	}
 }
 

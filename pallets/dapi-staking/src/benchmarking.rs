@@ -18,10 +18,10 @@ const BLOCK_REWARD: u32 = 1000;
 fn initialize<T: Config>() {
 	// Remove everything from storage
 	Ledger::<T>::remove_all(None);
-	RegisteredProviders::<T>::remove_all(None);
-	GeneralEraInfo::<T>::remove_all(None);
-	ProviderEraStake::<T>::remove_all(None);
-	GeneralStakerInfo::<T>::remove_all(None);
+	ProviderInfo::<T>::remove_all(None);
+	EraInfo::<T>::remove_all(None);
+	ProviderEraMetadata::<T>::remove_all(None);
+	DelegatorInfo::<T>::remove_all(None);
 	CurrentEra::<T>::kill();
 	BlockRewardAccumulator::<T>::kill();
 
@@ -51,8 +51,8 @@ fn register_provider<T: Config>() -> Result<(T::AccountId, T::ProviderId), &'sta
 	let operator: T::AccountId = account("operator", 10000, SEED);
 	T::Currency::make_free_balance_be(&operator, BalanceOf::<T>::max_value());
 	let provider_id = T::ProviderId::default();
-	let deposit = T::RegisterDeposit::get() + T::MinimumStakingAmount::get();
-	DapiStaking::<T>::register(operator.clone(), provider_id.clone(), deposit)?;
+	let deposit = T::MinProviderStake::get() + T::MinDelegatorStake::get();
+	DapiStaking::<T>::register_provider(operator.clone(), provider_id.clone(), deposit)?;
 	Ok((operator, provider_id))
 }
 
@@ -65,7 +65,7 @@ fn prepare_stake<T: Config>(
 	provider_id: &T::ProviderId,
 	seed: u32,
 ) -> Result<Vec<T::AccountId>, &'static str> {
-	let stake_balance = T::MinimumStakingAmount::get();
+	let stake_balance = T::MinDelegatorStake::get();
 	let mut stakers = Vec::new();
 
 	for id in 0..number_of_stakers {
@@ -73,7 +73,7 @@ fn prepare_stake<T: Config>(
 		stakers.push(staker_acc.clone());
 		T::Currency::make_free_balance_be(&staker_acc, BalanceOf::<T>::max_value());
 
-		DapiStaking::<T>::stake(
+		DapiStaking::<T>::delegator_stake(
 			RawOrigin::Signed(staker_acc).into(),
 			provider_id.clone(),
 			stake_balance.clone(),

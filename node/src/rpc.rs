@@ -1,4 +1,4 @@
-//! Massbit RPCs implementation.
+//! RPCs implementation.
 
 #![warn(missing_docs)]
 

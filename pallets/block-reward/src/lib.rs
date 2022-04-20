@@ -2,8 +2,6 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use pallet::*;
-
 use frame_support::{
 	pallet_prelude::*,
 	traits::{Currency, Get, Imbalance, OnTimestampSet},
@@ -14,6 +12,8 @@ use sp_runtime::{
 	Perbill,
 };
 use sp_std::vec;
+
+pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {

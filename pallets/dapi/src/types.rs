@@ -19,10 +19,10 @@ pub enum ProviderType {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub enum ProviderState {
+pub enum ProviderStatus {
 	Registered,
 	Active,
-	InActive,
+	InActive { reason: ProviderDeactivateReason },
 }
 
 #[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -30,7 +30,7 @@ pub struct Provider<AccountId, ChainId> {
 	pub provider_type: ProviderType,
 	pub operator: AccountId,
 	pub chain_id: ChainId,
-	pub state: ProviderState,
+	pub status: ProviderStatus,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]

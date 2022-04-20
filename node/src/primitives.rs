@@ -1,4 +1,4 @@
-//! Massbit opaque primitives for different runtimes.
+//! Opaque primitives for different runtimes.
 
 /// An index to a block.
 pub type BlockNumber = u32;

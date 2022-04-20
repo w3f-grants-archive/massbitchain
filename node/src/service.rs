@@ -38,6 +38,29 @@ pub mod devnet {
 	}
 }
 
+/// Testnet runtime executor
+pub mod testnet {
+	pub use testnet_runtime::RuntimeApi;
+
+	/// Testnet runtime executor.
+	pub struct Executor;
+	impl sc_executor::NativeExecutionDispatch for Executor {
+		#[cfg(not(feature = "runtime-benchmarks"))]
+		type ExtendHostFunctions = ();
+
+		#[cfg(feature = "runtime-benchmarks")]
+		type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
+
+		fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
+			testnet_runtime::api::dispatch(method, data)
+		}
+
+		fn native_version() -> sc_executor::NativeVersion {
+			testnet_runtime::native_version()
+		}
+	}
+}
+
 pub fn new_partial<RuntimeApi, Executor>(
 	config: &Configuration,
 ) -> Result<
@@ -374,4 +397,8 @@ where
 
 pub fn start_devnet_node(config: Configuration) -> Result<TaskManager, ServiceError> {
 	start_node_impl::<devnet_runtime::RuntimeApi, devnet::Executor>(config)
+}
+
+pub fn start_testnet_node(config: Configuration) -> Result<TaskManager, ServiceError> {
+	start_node_impl::<testnet_runtime::RuntimeApi, testnet::Executor>(config)
 }
