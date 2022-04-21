@@ -32,7 +32,6 @@ pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId, ImOnl
 	)
 }
 
-///  Gen local chain specification
 pub fn get_chain_spec() -> DevnetChainSpec {
 	let mut properties = serde_json::map::Map::new();
 	properties.insert("tokenSymbol".into(), "MBTD".into());
@@ -44,7 +43,7 @@ pub fn get_chain_spec() -> DevnetChainSpec {
 		move || {
 			make_genesis(
 				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice")],
+				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
@@ -56,7 +55,10 @@ pub fn get_chain_spec() -> DevnetChainSpec {
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
 				],
-				vec![get_account_id_from_seed::<sr25519::Public>("Ferdie")],
+				vec![
+					get_account_id_from_seed::<sr25519::Public>("Eve"),
+					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
+				],
 			)
 		},
 		vec![],
@@ -68,7 +70,6 @@ pub fn get_chain_spec() -> DevnetChainSpec {
 	)
 }
 
-/// Helper function to create GenesisConfig.
 fn make_genesis(
 	initial_authorities: Vec<(AccountId, AuraId, GrandpaId, ImOnlineId)>,
 	root_key: AccountId,
@@ -114,8 +115,8 @@ type AccountPublic = <Signature as Verify>::Signer;
 
 /// Generate an account ID from seed.
 pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
-	where
-		AccountPublic: From<<TPublic::Pair as Pair>::Public>,
+where
+	AccountPublic: From<<TPublic::Pair as Pair>::Public>,
 {
 	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
 }

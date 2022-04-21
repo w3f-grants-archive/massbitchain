@@ -1,3 +1,5 @@
+//! dAPI Management Pallet
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod types;
@@ -43,16 +45,16 @@ pub mod pallet {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
-		/// The currency mechanism
+		/// The currency mechanism.
 		type Currency: Currency<Self::AccountId>;
 
-		/// dAPI staking.
+		/// dAPI staking helper.
 		type DapiStaking: DapiStaking<Self::AccountId, Self::MassbitId, BalanceOf<Self>>;
 
 		/// The origin which can add/remove regulators.
 		type UpdateRegulatorOrigin: EnsureOrigin<Self::Origin>;
 
-		/// For constraining the maximum length of a chain id.
+		/// For constraining the maximum length of a Chain Id.
 		type ChainIdMaxLength: Get<u32>;
 
 		/// The Id type of Massbit provider or project.
@@ -69,59 +71,58 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		/// The provider/project is already registered.
 		AlreadyExist,
-		/// The provider is inactive.
 		InactiveProvider,
-		/// Chain Id is too long.
 		BadChainId,
-		/// The provider/project doesn't exist in the list.
 		NotExist,
-		/// You are not the owner of the The provider/project.
 		NotOwner,
-		/// No permission to perform specific operation.
 		PermissionDenied,
-		/// Provider invalid state.
-		InvalidProviderState,
+		InvalidProviderStatus,
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// New project is registered.
 		ProjectRegistered {
 			project_id: T::MassbitId,
 			consumer: T::AccountId,
 			chain_id: Vec<u8>,
 			quota: u128,
 		},
-		/// Project is deposited.
-		ProjectDeposited { project_id: T::MassbitId, quota: u128 },
-		/// Project reached max quota.
-		ProjectReachedQuota { project_id: T::MassbitId },
-		/// A provider is registered.
+		ProjectDeposited {
+			project_id: T::MassbitId,
+			quota: u128,
+		},
+		ProjectReachedQuota {
+			project_id: T::MassbitId,
+		},
 		ProviderRegistered {
 			provider_id: T::MassbitId,
 			provider_type: ProviderType,
 			operator: T::AccountId,
 			chain_id: Vec<u8>,
 		},
-		/// Provider is deposited and becomes activated.
-		ProviderActivated { provider_id: T::MassbitId, provider_type: ProviderType },
-		/// A provider is deactivated by deregistration or reported offence by regulator.
+		ProviderActivated {
+			provider_id: T::MassbitId,
+			provider_type: ProviderType,
+		},
 		ProviderDeactivated {
 			provider_id: T::MassbitId,
 			provider_type: ProviderType,
 			reason: ProviderDeactivateReason,
 		},
-		/// Chain Id is added to well known set.
-		ChainIdAdded { chain_id: Vec<u8> },
-		/// Chain Id is removed from well known set.
-		ChainIdRemoved { chain_id: Vec<u8> },
-		/// New regulator is added.
-		RegulatorAdded { account_id: T::AccountId },
-		/// New regulator is removed.
-		RegulatorRemoved { account_id: T::AccountId },
+		ChainIdAdded {
+			chain_id: Vec<u8>,
+		},
+		ChainIdRemoved {
+			chain_id: Vec<u8>,
+		},
+		RegulatorAdded {
+			account_id: T::AccountId,
+		},
+		RegulatorRemoved {
+			account_id: T::AccountId,
+		},
 	}
 
 	#[pallet::storage]
@@ -268,7 +269,7 @@ pub mod pallet {
 					provider_type,
 					operator: operator.clone(),
 					chain_id: bounded_chain_id,
-					state: ProviderState::Registered,
+					status: ProviderStatus::Registered,
 				},
 			);
 
@@ -282,7 +283,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight(100)]
+		#[pallet::weight(T::WeightInfo::register_provider())]
 		pub fn deposit_provider(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
@@ -292,11 +293,14 @@ pub mod pallet {
 
 			let mut provider = Providers::<T>::get(&provider_id).ok_or(Error::<T>::NotExist)?;
 			ensure!(provider.operator == operator, Error::<T>::NotOwner);
-			ensure!(provider.state == ProviderState::Registered, Error::<T>::InvalidProviderState);
+			ensure!(
+				provider.status == ProviderStatus::Registered,
+				Error::<T>::InvalidProviderStatus
+			);
 
-			T::DapiStaking::register(operator.clone(), provider_id.clone(), deposit)?;
+			T::DapiStaking::register_provider(operator.clone(), provider_id.clone(), deposit)?;
 
-			provider.state = ProviderState::Active;
+			provider.status = ProviderStatus::Active;
 			Providers::<T>::insert(&provider_id, provider.clone());
 
 			Self::deposit_event(Event::ProviderActivated {
@@ -316,11 +320,12 @@ pub mod pallet {
 
 			let mut provider = Providers::<T>::get(&provider_id).ok_or(Error::<T>::NotExist)?;
 			ensure!(provider.operator == account, Error::<T>::NotOwner);
-			ensure!(provider.state == ProviderState::Active, Error::<T>::InactiveProvider);
+			ensure!(provider.status == ProviderStatus::Active, Error::<T>::InvalidProviderStatus);
 
-			T::DapiStaking::unregister(provider_id.clone())?;
+			T::DapiStaking::unregister_provider(provider_id.clone())?;
 
-			provider.state = ProviderState::InActive;
+			provider.status =
+				ProviderStatus::InActive { reason: ProviderDeactivateReason::UnRegistered };
 			Providers::<T>::insert(&provider_id, provider.clone());
 
 			Self::deposit_event(Event::<T>::ProviderDeactivated {
@@ -342,11 +347,11 @@ pub mod pallet {
 			ensure!(Self::regulators().contains(&regulator), Error::<T>::PermissionDenied);
 
 			let mut provider = Self::providers(&provider_id).ok_or(Error::<T>::NotExist)?;
-			ensure!(provider.state == ProviderState::Active, Error::<T>::InvalidProviderState);
+			ensure!(provider.status == ProviderStatus::Active, Error::<T>::InvalidProviderStatus);
 
-			T::DapiStaking::unregister(provider_id.clone())?;
+			T::DapiStaking::unregister_provider(provider_id.clone())?;
 
-			provider.state = ProviderState::InActive;
+			provider.status = ProviderStatus::InActive { reason };
 			Providers::<T>::insert(&provider_id, provider.clone());
 
 			Self::deposit_event(Event::<T>::ProviderDeactivated {
@@ -445,11 +450,11 @@ pub mod pallet {
 }
 
 pub trait DapiStaking<AccountId, Provider, Balance> {
-	fn register(
+	fn register_provider(
 		origin: AccountId,
 		provider_id: Provider,
 		deposit: Balance,
 	) -> DispatchResultWithPostInfo;
 
-	fn unregister(provider_id: Provider) -> DispatchResultWithPostInfo;
+	fn unregister_provider(provider_id: Provider) -> DispatchResultWithPostInfo;
 }

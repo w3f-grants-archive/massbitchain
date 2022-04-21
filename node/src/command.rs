@@ -1,10 +1,8 @@
+#[cfg(feature = "frame-benchmarking")]
+use crate::primitives::Block;
 use crate::{
-	chain_spec::{
-		self,
-		devnet,
-	},
+	chain_spec::{self, devnet},
 	cli::{Cli, Subcommand},
-	primitives::Block,
 };
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
 
@@ -12,11 +10,16 @@ use super::service;
 
 trait IdentifyChain {
 	fn is_dev(&self) -> bool;
+	fn is_testnet(&self) -> bool;
 }
 
 impl IdentifyChain for dyn sc_service::ChainSpec {
 	fn is_dev(&self) -> bool {
 		self.id().starts_with("dev")
+	}
+
+	fn is_testnet(&self) -> bool {
+		self.id().starts_with("testnet")
 	}
 }
 
@@ -24,11 +27,16 @@ impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
 	fn is_dev(&self) -> bool {
 		<dyn sc_service::ChainSpec>::is_dev(self)
 	}
+
+	fn is_testnet(&self) -> bool {
+		<dyn sc_service::ChainSpec>::is_testnet(self)
+	}
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
 	Ok(match id {
 		"dev" => Box::new(chain_spec::devnet::get_chain_spec()),
+		"testnet" => Box::new(chain_spec::testnet::get_chain_spec()),
 		path => Box::new(devnet::DevnetChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 	})
 }
@@ -62,8 +70,12 @@ impl SubstrateCli for Cli {
 		load_spec(id)
 	}
 
-	fn native_runtime_version(_chain_spec: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
-		&devnet_runtime::VERSION
+	fn native_runtime_version(chain_spec: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
+		if chain_spec.is_testnet() {
+			&devnet_runtime::VERSION
+		} else {
+			&devnet_runtime::VERSION
+		}
 	}
 }
 
@@ -88,7 +100,11 @@ pub fn run() -> sc_cli::Result<()> {
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
-				service::start_devnet_node(config).map_err(sc_cli::Error::Service)
+				if config.chain_spec.is_testnet() {
+					service::start_testnet_node(config).map_err(sc_cli::Error::Service)
+				} else {
+					service::start_devnet_node(config).map_err(sc_cli::Error::Service)
+				}
 			})
 		},
 	}

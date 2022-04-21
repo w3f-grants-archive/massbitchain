@@ -1,10 +1,10 @@
 use super::*;
 use frame_support::{
-	dispatch::{DispatchResult, RawOrigin},
+	dispatch::DispatchResult,
 	ensure,
 	traits::{
 		Currency, ExistenceRequirement, Get, Imbalance, LockIdentifier, LockableCurrency,
-		ReservableCurrency, WithdrawReasons,
+		WithdrawReasons,
 	},
 	weights::Weight,
 	PalletId,
@@ -42,9 +42,8 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// The staking balance.
-		type Currency: LockableCurrency<Self::AccountId, Moment = Self::BlockNumber>
-			+ ReservableCurrency<Self::AccountId>;
+		/// The balance type of pallet.
+		type Currency: LockableCurrency<Self::AccountId, Moment = Self::BlockNumber>;
 
 		/// Provider Id.
 		type ProviderId: Parameter + Member + Default;
@@ -53,53 +52,53 @@ pub mod pallet {
 		#[pallet::constant]
 		type BlockPerEra: Get<BlockNumberFor<Self>>;
 
-		/// Percentage of reward paid to operator.
+		/// Percentage of reward paid to delegators.
 		#[pallet::constant]
-		type OperatorRewardPercentage: Get<Perbill>;
+		type ProviderCommission: Get<Perbill>;
 
-		/// Minimum bonded deposit for new provider registration.
+		/// Minimum staking amount for new provider registration.
 		#[pallet::constant]
-		type RegisterDeposit: Get<BalanceOf<Self>>;
+		type MinProviderStake: Get<BalanceOf<Self>>;
 
-		/// Maximum number of unique stakers per provider.
+		/// Maximum number of unique delegators per provider.
 		#[pallet::constant]
-		type MaxNumberOfStakersPerProvider: Get<u32>;
+		type MaxDelegatorsPerProvider: Get<u32>;
 
-		/// Minimum amount user must stake on provider.
-		/// User can stake less if they already have the minimum staking amount staked on that
-		/// particular provider.
+		/// Minimum amount delegator must delegate on provider.
+		/// Delegator can delegate less if they already have the minimum staking amount delegated on
+		/// that particular provider.
 		#[pallet::constant]
-		type MinimumStakingAmount: Get<BalanceOf<Self>>;
+		type MinDelegatorStake: Get<BalanceOf<Self>>;
 
 		/// dAPI staking pallet Id.
 		#[pallet::constant]
 		type PalletId: Get<PalletId>;
 
-		/// Minimum amount that should be left on staker account after staking.
+		/// Minimum amount that should be left on account after locking.
 		#[pallet::constant]
-		type MinimumRemainingAmount: Get<BalanceOf<Self>>;
+		type MinRemainingAmount: Get<BalanceOf<Self>>;
 
 		/// Max number of unlocking chunks per account Id <-> provider Id pairing.
 		/// If value is zero, unlocking becomes impossible.
 		#[pallet::constant]
 		type MaxUnlockingChunks: Get<u32>;
 
-		/// Number of eras that need to pass until unstaked value can be withdrawn.
+		/// Number of eras that need to pass until unbonded value can be withdrawn.
 		/// Current era is always counted as full era (regardless how much blocks are remaining).
 		#[pallet::constant]
 		type UnbondingPeriod: Get<u32>;
 
-		/// Max number of unique `EraStake` values that can exist for a `(staker, provider)`
-		/// pairing. When stakers claims rewards, they will either keep the number of `EraStake`
-		/// values the same or they will reduce them by one. Stakers cannot add an additional
-		/// `EraStake` value by calling `stake` or `unstake` if they've reached the max number of
-		/// values.
+		/// Max number of unique `EraDelegation` values that can exist for a `(delegator, provider)`
+		/// pairing. When delegators claims rewards, they will either keep the number of
+		/// `EraDelegation` values the same or they will reduce them by one. Delegators cannot add
+		/// an additional `EraDelegation` value by calling `delegate` or `delegator_bond_less` if
+		/// they've reached the max number of values.
 		///
 		/// This ensures that history doesn't grow indefinitely - if there are too many chunks,
-		/// stakers should first claim their former rewards before adding additional `EraStake`
-		/// values.
+		/// delegators should first claim their former rewards before adding additional
+		/// `EraDelegation` values.
 		#[pallet::constant]
-		type MaxEraStakeValues: Get<u32>;
+		type MaxEraDelegationValues: Get<u32>;
 
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
@@ -108,7 +107,7 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 	}
 
-	/// Bonded amount for the staker.
+	/// Ledger of an account.
 	#[pallet::storage]
 	#[pallet::getter(fn ledger)]
 	pub type Ledger<T: Config> =
@@ -118,6 +117,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn current_era)]
 	pub type CurrentEra<T> = StorageValue<_, EraIndex, ValueQuery>;
+
+	/// Stores the block number of when the next era starts
+	#[pallet::storage]
+	#[pallet::getter(fn next_era_start_block)]
+	pub type NextEraStartBlock<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
 
 	/// Accumulator for block rewards during an era. It is reset at every new era
 	#[pallet::storage]
@@ -137,36 +141,35 @@ pub mod pallet {
 	/// Registered provider information
 	#[pallet::storage]
 	#[pallet::getter(fn provider_info)]
-	pub(crate) type RegisteredProviders<T: Config> =
-		StorageMap<_, Blake2_128Concat, T::ProviderId, ProviderInfo<T::AccountId>>;
+	pub(crate) type ProviderInfo<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::ProviderId, ProviderMetadata<T::AccountId>>;
 
 	/// Total staked, locked & rewarded for a particular era
 	#[pallet::storage]
-	#[pallet::getter(fn general_era_info)]
-	pub type GeneralEraInfo<T: Config> =
-		StorageMap<_, Twox64Concat, EraIndex, EraInfo<BalanceOf<T>>>;
+	#[pallet::getter(fn era_info)]
+	pub type EraInfo<T: Config> = StorageMap<_, Twox64Concat, EraIndex, EraSnapshot<BalanceOf<T>>>;
 
-	/// Stores amount staked and stakers for a provider per era
+	/// Stores staked amount and delegators for a provider per era
 	#[pallet::storage]
-	#[pallet::getter(fn provider_stake_info)]
-	pub type ProviderEraStake<T: Config> = StorageDoubleMap<
+	#[pallet::getter(fn provider_era_info)]
+	pub type ProviderEraInfo<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
 		T::ProviderId,
 		Twox64Concat,
 		EraIndex,
-		ProviderStakeInfo<BalanceOf<T>>,
+		ProviderEraMetadata<BalanceOf<T>>,
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn staker_info)]
-	pub(crate) type GeneralStakerInfo<T: Config> = StorageDoubleMap<
+	#[pallet::getter(fn delegator_info)]
+	pub(crate) type DelegatorInfo<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
 		T::AccountId,
 		Blake2_128Concat,
 		T::ProviderId,
-		StakerInfo<BalanceOf<T>>,
+		DelegatorMetadata<BalanceOf<T>>,
 		ValueQuery,
 	>;
 
@@ -174,28 +177,20 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Account has staked funds on a provider.
-		Stake { staker: T::AccountId, provider_id: T::ProviderId, amount: BalanceOf<T> },
-		/// Account has unbonded & unstaked some funds. Unbonding process begins.
-		Unstake { staker: T::AccountId, provider_id: T::ProviderId, amount: BalanceOf<T> },
-		/// Account has fully withdrawn all staked amount from an unregistered provider.
-		WithdrawFromUnregistered {
-			who: T::AccountId,
-			provider_id: T::ProviderId,
-			amount: BalanceOf<T>,
-		},
+		Staked { who: T::AccountId, provider_id: T::ProviderId, amount: BalanceOf<T> },
+		/// Account has unstaked some funds. Unbonding process begins.
+		Unstaked { who: T::AccountId, provider_id: T::ProviderId, amount: BalanceOf<T> },
 		/// Account has withdrawn unbonded funds.
-		Withdrawn { staker: T::AccountId, amount: BalanceOf<T> },
-		/// New dapi staking era. Distribute era rewards to providers.
-		NewDapiStakingEra { era: EraIndex },
-		/// Reward paid to staker or operator.
-		Reward {
+		Withdrawn { who: T::AccountId, amount: BalanceOf<T> },
+		/// New staking era. Distribute era rewards to providers.
+		NewEra { era: EraIndex },
+		/// Payout to provider or delegator.
+		Payout {
 			who: T::AccountId,
 			provider_id: T::ProviderId,
 			era: EraIndex,
 			amount: BalanceOf<T>,
 		},
-		/// Provider removed from dapi staking.
-		ProviderUnregistered(T::ProviderId),
 	}
 
 	#[pallet::error]
@@ -213,10 +208,10 @@ pub mod pallet {
 		/// Report issue on github if this is ever emitted
 		UnknownEraReward,
 		/// Report issue on github if this is ever emitted
-		UnexpectedStakeInfoEra,
-		/// Too many active `EraStake` values for (staker, provider) pairing.
+		UnexpectedDelegationInfoEra,
+		/// Too many active `EraDelegation` values for (delegator, provider) pairing.
 		/// Claim existing rewards to fix this problem.
-		TooManyEraStakeValues,
+		TooManyEraDelegationValues,
 		/// Unclaimed rewards should be claimed before withdrawing stake.
 		UnclaimedRewardsRemaining,
 		/// Unstaking a provider with zero value
@@ -242,15 +237,16 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(now: BlockNumberFor<T>) -> Weight {
 			let force_new_era = Self::force_era().eq(&Forcing::ForceNew);
-			let blocks_per_era = T::BlockPerEra::get();
 			let previous_era = Self::current_era();
+			let next_era_start_block = Self::next_era_start_block();
 
 			// Value is compared to 1 since genesis block is ignored
-			if now % blocks_per_era == BlockNumberFor::<T>::from(1u32) ||
-				force_new_era || previous_era.is_zero()
-			{
+			if now >= next_era_start_block || force_new_era || previous_era.is_zero() {
+				let blocks_per_era = T::BlockPerEra::get();
 				let next_era = previous_era + 1;
 				CurrentEra::<T>::put(next_era);
+
+				NextEraStartBlock::<T>::put(now + blocks_per_era);
 
 				let reward = BlockRewardAccumulator::<T>::take();
 				Self::reward_balance_snapshot(previous_era, reward);
@@ -260,7 +256,7 @@ pub mod pallet {
 					ForceEra::<T>::put(Forcing::NotForcing);
 				}
 
-				Self::deposit_event(Event::<T>::NewDapiStakingEra { era: next_era });
+				Self::deposit_event(Event::<T>::NewEra { era: next_era });
 
 				consumed_weight + T::DbWeight::get().reads_writes(5, 3)
 			} else {
@@ -271,225 +267,91 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Withdraw staker's locked fund from a provider that was unregistered.
-		#[pallet::weight(T::WeightInfo::withdraw_from_unregistered_staker())]
-		pub fn withdraw_from_unregistered_staker(
-			origin: OriginFor<T>,
-			provider_id: T::ProviderId,
-		) -> DispatchResultWithPostInfo {
-			let staker = ensure_signed(origin)?;
-
-			let provider_info = RegisteredProviders::<T>::get(&provider_id)
-				.ok_or(Error::<T>::NotOperatedProvider)?;
-
-			let unregistered_era = if let ProviderState::Unregistered(e) = provider_info.state {
-				e
-			} else {
-				return Err(Error::<T>::NotUnregisteredProvider.into())
-			};
-
-			let current_era = Self::current_era();
-			ensure!(
-				current_era > unregistered_era + T::UnbondingPeriod::get(),
-				Error::<T>::NothingToWithdraw
-			);
-
-			let mut staker_info = Self::staker_info(&staker, &provider_id);
-			let staked_value = staker_info.latest_staked_value();
-			ensure!(staked_value > Zero::zero(), Error::<T>::NotStakedProvider);
-
-			// Don't allow withdrawal until all rewards have been claimed.
-			let (claimable_era, _) = staker_info.claim();
-			ensure!(
-				claimable_era >= unregistered_era || claimable_era.is_zero(),
-				Error::<T>::UnclaimedRewardsRemaining
-			);
-
-			let mut ledger = Self::ledger(&staker);
-			ledger.locked = ledger.locked.saturating_sub(staked_value);
-			Self::update_ledger(&staker, ledger);
-
-			Self::update_staker_info(&staker, &provider_id, Default::default());
-
-			let current_era = Self::current_era();
-			GeneralEraInfo::<T>::mutate(&current_era, |value| {
-				if let Some(x) = value {
-					x.staked = x.staked.saturating_sub(staked_value);
-					x.locked = x.locked.saturating_sub(staked_value);
-				}
-			});
-
-			Self::deposit_event(Event::<T>::WithdrawFromUnregistered {
-				who: staker,
-				provider_id,
-				amount: staked_value,
-			});
-
-			Ok(().into())
-		}
-
-		/// Withdraw operator's locked fund from a provider that was unregistered.
-		#[pallet::weight(T::WeightInfo::withdraw_from_unregistered_operator())]
-		pub fn withdraw_from_unregistered_operator(
-			origin: OriginFor<T>,
-			provider_id: T::ProviderId,
-		) -> DispatchResultWithPostInfo {
-			let operator = ensure_signed(origin)?;
-
-			let mut provider_info = RegisteredProviders::<T>::get(&provider_id)
-				.ok_or(Error::<T>::NotOperatedProvider)?;
-			ensure!(provider_info.operator == operator, Error::<T>::NotOwnedProvider);
-			ensure!(!provider_info.unreserved, Error::<T>::NothingToWithdraw);
-
-			let unregistered_era = if let ProviderState::Unregistered(e) = provider_info.state {
-				e
-			} else {
-				return Err(Error::<T>::NotUnregisteredProvider.into())
-			};
-
-			let current_era = Self::current_era();
-			ensure!(
-				current_era > unregistered_era + T::UnbondingPeriod::get(),
-				Error::<T>::NothingToWithdraw
-			);
-
-			provider_info.unreserved = true;
-			RegisteredProviders::<T>::insert(&provider_id, provider_info);
-
-			let unreserve_amount = T::RegisterDeposit::get();
-			T::Currency::unreserve(&operator, unreserve_amount);
-
-			Self::deposit_event(Event::<T>::WithdrawFromUnregistered {
-				who: operator,
-				provider_id,
-				amount: unreserve_amount,
-			});
-
-			Ok(().into())
-		}
-
-		/// Lock up and stake balance of the origin account.
-		///
-		/// Effects of staking will be felt at the beginning of the next era.
 		#[pallet::weight(T::WeightInfo::stake())]
-		pub fn stake(
+		pub fn provider_stake(
 			origin: OriginFor<T>,
 			provider_id: T::ProviderId,
-			#[pallet::compact] value: BalanceOf<T>,
+			#[pallet::compact] amount: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
-			let staker = ensure_signed(origin)?;
+			let who = ensure_signed(origin)?;
 
-			ensure!(Self::is_active_provider(&provider_id), Error::<T>::NotOperatedProvider);
+			let provider_info =
+				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
+			ensure!(
+				provider_info.status == ProviderStatus::Registered,
+				Error::<T>::NotOperatedProvider
+			);
+			ensure!(provider_info.owner == who, Error::<T>::NotOwnedProvider);
 
-			let mut ledger = Self::ledger(&staker);
-			let available_balance = Self::available_staking_balance(&staker, &ledger);
-			let value_to_stake = value.min(available_balance);
-			ensure!(value_to_stake > Zero::zero(), Error::<T>::StakingWithNoValue);
+			let mut ledger = Self::ledger(&who);
+			let available_balance = Self::available_balance(&who, &ledger);
+			let stake_amount = amount.min(available_balance);
+			ensure!(stake_amount > Zero::zero(), Error::<T>::StakingWithNoValue);
 
 			let current_era = Self::current_era();
-			let mut staking_info =
-				Self::provider_stake_info(&provider_id, current_era).unwrap_or_default();
-			let mut staker_info = Self::staker_info(&staker, &provider_id);
+			let mut provider_era_info =
+				Self::provider_era_info(&provider_id, current_era).unwrap_or_default();
 
-			ensure!(
-				!staker_info.latest_staked_value().is_zero() ||
-					staking_info.number_of_stakers < T::MaxNumberOfStakersPerProvider::get(),
-				Error::<T>::MaxNumberOfStakersExceeded
-			);
-			if staker_info.latest_staked_value().is_zero() {
-				staking_info.number_of_stakers = staking_info.number_of_stakers.saturating_add(1);
-			}
-
-			staker_info
-				.stake(current_era, value_to_stake)
-				.map_err(|_| Error::<T>::UnexpectedStakeInfoEra)?;
-			ensure!(
-				// One spot should remain for compounding reward claim call
-				staker_info.len() < T::MaxEraStakeValues::get(),
-				Error::<T>::TooManyEraStakeValues
-			);
-			ensure!(
-				staker_info.latest_staked_value() >= T::MinimumStakingAmount::get(),
-				Error::<T>::InsufficientValue,
-			);
-
-			// Increment ledger and total staker value for provider. Overflow shouldn't be possible
-			// but the check is here just for safety.
+			// Increment ledger and total delegator value for provider. Overflow shouldn't be
+			// possible but the check is here just for safety.
 			ledger.locked =
-				ledger.locked.checked_add(&value_to_stake).ok_or(ArithmeticError::Overflow)?;
-			staking_info.total = staking_info
+				ledger.locked.checked_add(&stake_amount).ok_or(ArithmeticError::Overflow)?;
+			provider_era_info.bond = provider_era_info
+				.bond
+				.checked_add(&stake_amount)
+				.ok_or(ArithmeticError::Overflow)?;
+			provider_era_info.total = provider_era_info
 				.total
-				.checked_add(&value_to_stake)
+				.checked_add(&stake_amount)
 				.ok_or(ArithmeticError::Overflow)?;
 
-			GeneralEraInfo::<T>::mutate(&current_era, |value| {
+			EraInfo::<T>::mutate(&current_era, |value| {
 				if let Some(x) = value {
-					x.staked = x.staked.saturating_add(value_to_stake);
-					x.locked = x.locked.saturating_add(value_to_stake);
+					x.staked = x.staked.saturating_add(stake_amount);
+					x.locked = x.locked.saturating_add(stake_amount);
 				}
 			});
 
-			Self::update_ledger(&staker, ledger);
-			Self::update_staker_info(&staker, &provider_id, staker_info);
-			ProviderEraStake::<T>::insert(&provider_id, current_era, staking_info);
+			Self::update_ledger(&who, ledger);
+			ProviderEraInfo::<T>::insert(&provider_id, current_era, provider_era_info);
 
-			Self::deposit_event(Event::<T>::Stake { staker, provider_id, amount: value_to_stake });
+			Self::deposit_event(Event::<T>::Staked { who, provider_id, amount: stake_amount });
+
 			Ok(().into())
 		}
 
-		/// Start unbonding process and unstake balance from the provider.
-		///
-		/// The unstaked amount will no longer be eligible for rewards but still won't be unlocked.
-		/// User needs to wait for the unbonding period to finish before being able to withdraw
-		/// the funds via `withdraw_staked` call.
-		///
-		/// In case remaining staked balance on provider is below minimum staking amount,
-		/// entire stake for that provider will be unstaked.
-		#[pallet::weight(T::WeightInfo::unstake())]
-		pub fn unstake(
+		#[pallet::weight(T::WeightInfo::stake())]
+		pub fn provider_unstake(
 			origin: OriginFor<T>,
 			provider_id: T::ProviderId,
-			#[pallet::compact] value: BalanceOf<T>,
+			#[pallet::compact] amount: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
-			let staker = ensure_signed(origin)?;
+			let who = ensure_signed(origin)?;
 
-			ensure!(value > Zero::zero(), Error::<T>::UnstakingWithNoValue);
-			ensure!(Self::is_active_provider(&provider_id), Error::<T>::NotOperatedProvider);
-
-			let mut staker_info = Self::staker_info(&staker, &provider_id);
-			let staked_value = staker_info.latest_staked_value();
-			ensure!(staked_value > Zero::zero(), Error::<T>::NotStakedProvider);
+			ensure!(amount > Zero::zero(), Error::<T>::UnstakingWithNoValue);
+			let provider_info =
+				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
+			ensure!(
+				provider_info.status == ProviderStatus::Registered,
+				Error::<T>::NotOperatedProvider
+			);
+			ensure!(provider_info.owner == who, Error::<T>::NotOwnedProvider);
 
 			let current_era = Self::current_era();
-			let mut provider_stake_info =
-				Self::provider_stake_info(&provider_id, current_era).unwrap_or_default();
+			let mut provider_era_info =
+				Self::provider_era_info(&provider_id, current_era).unwrap_or_default();
 
-			let remaining = staked_value.saturating_sub(value);
-			let value_to_unstake = if remaining < T::MinimumStakingAmount::get() {
-				provider_stake_info.number_of_stakers =
-					provider_stake_info.number_of_stakers.saturating_sub(1);
-				staked_value
-			} else {
-				value
-			};
-			provider_stake_info.total = provider_stake_info.total.saturating_sub(value_to_unstake);
-
-			// Sanity check
-			ensure!(value_to_unstake > Zero::zero(), Error::<T>::UnstakingWithNoValue);
-
-			staker_info
-				.unstake(current_era, value_to_unstake)
-				.map_err(|_| Error::<T>::UnexpectedStakeInfoEra)?;
 			ensure!(
-				// One spot should remain for compounding reward claim call
-				staker_info.len() < T::MaxEraStakeValues::get(),
-				Error::<T>::TooManyEraStakeValues
+				provider_era_info.bond >= amount + T::MinProviderStake::get(),
+				Error::<T>::InsufficientValue
 			);
+			provider_era_info.bond = provider_era_info.bond.saturating_sub(amount);
+			provider_era_info.total = provider_era_info.total.saturating_sub(amount);
 
 			// Update the chunks
-			let mut ledger = Self::ledger(&staker);
+			let mut ledger = Self::ledger(&who);
 			ledger.unbonding_info.add(UnlockingChunk {
-				amount: value_to_unstake,
+				amount,
 				unlock_era: current_era + T::UnbondingPeriod::get(),
 			});
 			// This should be done AFTER insertion since it's possible for chunks to merge
@@ -498,21 +360,172 @@ pub mod pallet {
 				Error::<T>::TooManyUnlockingChunks
 			);
 
-			Self::update_ledger(&staker, ledger);
+			Self::update_ledger(&who, ledger);
 
-			// Update total staked value in era
-			GeneralEraInfo::<T>::mutate(&current_era, |value| {
+			// Update total bonded value in era
+			EraInfo::<T>::mutate(&current_era, |value| {
 				if let Some(x) = value {
-					x.staked = x.staked.saturating_sub(value_to_unstake);
+					x.staked = x.staked.saturating_sub(amount);
 				}
 			});
-			Self::update_staker_info(&staker, &provider_id, staker_info);
-			ProviderEraStake::<T>::insert(&provider_id, current_era, provider_stake_info);
 
-			Self::deposit_event(Event::<T>::Unstake {
-				staker,
+			ProviderEraInfo::<T>::insert(&provider_id, current_era, provider_era_info);
+
+			Self::deposit_event(Event::<T>::Unstaked { who, provider_id, amount });
+
+			Ok(().into())
+		}
+
+		/// Delegate provider, effects of delegation will be felt at the beginning of the next era.
+		#[pallet::weight(T::WeightInfo::stake())]
+		pub fn delegator_stake(
+			origin: OriginFor<T>,
+			provider_id: T::ProviderId,
+			#[pallet::compact] amount: BalanceOf<T>,
+		) -> DispatchResultWithPostInfo {
+			let delegator = ensure_signed(origin)?;
+
+			ensure!(Self::is_active_provider(&provider_id), Error::<T>::NotOperatedProvider);
+
+			let mut ledger = Self::ledger(&delegator);
+			let available_balance = Self::available_balance(&delegator, &ledger);
+			let to_stake_amount = amount.min(available_balance);
+			ensure!(to_stake_amount > Zero::zero(), Error::<T>::StakingWithNoValue);
+
+			let current_era = Self::current_era();
+			let mut provider_era_info =
+				Self::provider_era_info(&provider_id, current_era).unwrap_or_default();
+			let mut delegator_info = Self::delegator_info(&delegator, &provider_id);
+
+			ensure!(
+				!delegator_info.latest_staked_value().is_zero() ||
+					provider_era_info.number_of_delegators <= T::MaxDelegatorsPerProvider::get(),
+				Error::<T>::MaxNumberOfStakersExceeded
+			);
+			if delegator_info.latest_staked_value().is_zero() {
+				provider_era_info.number_of_delegators =
+					provider_era_info.number_of_delegators.saturating_add(1);
+			}
+
+			delegator_info
+				.stake(current_era, to_stake_amount)
+				.map_err(|_| Error::<T>::UnexpectedDelegationInfoEra)?;
+			ensure!(
+				// One spot should remain for compounding reward claim call
+				delegator_info.len() < T::MaxEraDelegationValues::get(),
+				Error::<T>::TooManyEraDelegationValues
+			);
+			ensure!(
+				delegator_info.latest_staked_value() >= T::MinDelegatorStake::get(),
+				Error::<T>::InsufficientValue,
+			);
+
+			// Increment ledger and total delegator value for provider. Overflow shouldn't be
+			// possible but the check is here just for safety.
+			ledger.locked =
+				ledger.locked.checked_add(&to_stake_amount).ok_or(ArithmeticError::Overflow)?;
+			provider_era_info.total = provider_era_info
+				.total
+				.checked_add(&to_stake_amount)
+				.ok_or(ArithmeticError::Overflow)?;
+
+			EraInfo::<T>::mutate(&current_era, |value| {
+				if let Some(x) = value {
+					x.staked = x.staked.saturating_add(to_stake_amount);
+					x.locked = x.locked.saturating_add(to_stake_amount);
+				}
+			});
+
+			Self::update_ledger(&delegator, ledger);
+			Self::update_delegator_info(&delegator, &provider_id, delegator_info);
+			ProviderEraInfo::<T>::insert(&provider_id, current_era, provider_era_info);
+
+			Self::deposit_event(Event::<T>::Staked {
+				who: delegator,
 				provider_id,
-				amount: value_to_unstake,
+				amount: to_stake_amount,
+			});
+
+			Ok(().into())
+		}
+
+		/// Delegator unstakes from the provider.
+		///
+		/// The unstaked amount will no longer be eligible for rewards but still won't be unlocked.
+		/// User needs to wait for the unbonding period to finish before being able to withdraw
+		/// the funds via `withdraw_unbonded` call.
+		///
+		/// In case remaining bonded balance on provider is below minimum delegating amount,
+		/// entire amount for that provider will be unbonded.
+		#[pallet::weight(T::WeightInfo::unstake())]
+		pub fn delegator_unstake(
+			origin: OriginFor<T>,
+			provider_id: T::ProviderId,
+			#[pallet::compact] amount: BalanceOf<T>,
+		) -> DispatchResultWithPostInfo {
+			let delegator = ensure_signed(origin)?;
+
+			ensure!(amount > Zero::zero(), Error::<T>::UnstakingWithNoValue);
+			ensure!(Self::is_active_provider(&provider_id), Error::<T>::NotOperatedProvider);
+
+			let mut delegator_info = Self::delegator_info(&delegator, &provider_id);
+			let staked_amount = delegator_info.latest_staked_value();
+			ensure!(staked_amount > Zero::zero(), Error::<T>::NotStakedProvider);
+
+			let current_era = Self::current_era();
+			let mut provider_era_info =
+				Self::provider_era_info(&provider_id, current_era).unwrap_or_default();
+
+			let remaining = staked_amount.saturating_sub(amount);
+			let unstake_amount = if remaining < T::MinDelegatorStake::get() {
+				provider_era_info.number_of_delegators =
+					provider_era_info.number_of_delegators.saturating_sub(1);
+				staked_amount
+			} else {
+				amount
+			};
+			provider_era_info.total = provider_era_info.total.saturating_sub(unstake_amount);
+
+			// Sanity check
+			ensure!(unstake_amount > Zero::zero(), Error::<T>::UnstakingWithNoValue);
+
+			delegator_info
+				.unstake(current_era, unstake_amount)
+				.map_err(|_| Error::<T>::UnexpectedDelegationInfoEra)?;
+			ensure!(
+				// One spot should remain for compounding reward claim call
+				delegator_info.len() < T::MaxEraDelegationValues::get(),
+				Error::<T>::TooManyEraDelegationValues
+			);
+
+			// Update the chunks
+			let mut ledger = Self::ledger(&delegator);
+			ledger.unbonding_info.add(UnlockingChunk {
+				amount: unstake_amount,
+				unlock_era: current_era + T::UnbondingPeriod::get(),
+			});
+			// This should be done AFTER insertion since it's possible for chunks to merge
+			ensure!(
+				ledger.unbonding_info.len() <= T::MaxUnlockingChunks::get(),
+				Error::<T>::TooManyUnlockingChunks
+			);
+
+			Self::update_ledger(&delegator, ledger);
+
+			// Update total bonded value in era
+			EraInfo::<T>::mutate(&current_era, |value| {
+				if let Some(x) = value {
+					x.staked = x.staked.saturating_sub(unstake_amount);
+				}
+			});
+
+			Self::update_delegator_info(&delegator, &provider_id, delegator_info);
+			ProviderEraInfo::<T>::insert(&provider_id, current_era, provider_era_info);
+
+			Self::deposit_event(Event::<T>::Unstaked {
+				who: delegator,
+				provider_id,
+				amount: unstake_amount,
 			});
 
 			Ok(().into())
@@ -524,130 +537,232 @@ pub mod pallet {
 		/// they will remain and can be withdrawn later.
 		#[pallet::weight(T::WeightInfo::withdraw_unstaked())]
 		pub fn withdraw_unstaked(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			let staker = ensure_signed(origin)?;
+			let account = ensure_signed(origin)?;
 
-			let mut ledger = Self::ledger(&staker);
+			let mut ledger = Self::ledger(&account);
 			let current_era = Self::current_era();
 
 			let (valid_chunks, future_chunks) = ledger.unbonding_info.partition(current_era);
-			let withdraw_amount = valid_chunks.sum();
+			let amount = valid_chunks.sum();
 
-			ensure!(!withdraw_amount.is_zero(), Error::<T>::NothingToWithdraw);
+			ensure!(!amount.is_zero(), Error::<T>::NothingToWithdraw);
 
-			ledger.locked = ledger.locked.saturating_sub(withdraw_amount);
+			ledger.locked = ledger.locked.saturating_sub(amount);
 			ledger.unbonding_info = future_chunks;
 
-			Self::update_ledger(&staker, ledger);
-			GeneralEraInfo::<T>::mutate(&current_era, |value| {
+			Self::update_ledger(&account, ledger);
+
+			EraInfo::<T>::mutate(&current_era, |value| {
 				if let Some(x) = value {
-					x.locked = x.locked.saturating_sub(withdraw_amount)
+					x.locked = x.locked.saturating_sub(amount)
 				}
 			});
 
-			Self::deposit_event(Event::<T>::Withdrawn { staker, amount: withdraw_amount });
+			Self::deposit_event(Event::<T>::Withdrawn { who: account, amount });
 
 			Ok(().into())
 		}
 
-		/// Claim earned staker rewards for the oldest era.
-		#[pallet::weight(T::WeightInfo::claim_staker())]
-		pub fn claim_staker(
-			origin: OriginFor<T>,
-			provider_id: T::ProviderId,
-		) -> DispatchResultWithPostInfo {
-			let staker = ensure_signed(origin)?;
-
-			let mut staker_info = Self::staker_info(&staker, &provider_id);
-			let (era, staked) = staker_info.claim();
-			ensure!(staked > Zero::zero(), Error::<T>::NotStakedProvider);
-
-			let provider_info = RegisteredProviders::<T>::get(&provider_id)
-				.ok_or(Error::<T>::NotOperatedProvider)?;
-			if let ProviderState::Unregistered(unregistered_era) = provider_info.state {
-				ensure!(era < unregistered_era, Error::<T>::NotOperatedProvider);
-			}
-
-			let current_era = Self::current_era();
-			ensure!(era < current_era, Error::<T>::EraOutOfBounds);
-
-			let staking_info = Self::provider_stake_info(&provider_id, era).unwrap_or_default();
-			let reward_and_stake =
-				Self::general_era_info(era).ok_or(Error::<T>::UnknownEraReward)?;
-
-			let (_, stakers_joint_reward) =
-				Self::operator_stakers_split(&staking_info, &reward_and_stake);
-			let staker_reward =
-				Perbill::from_rational(staked, staking_info.total) * stakers_joint_reward;
-
-			let reward_imbalance = T::Currency::withdraw(
-				&Self::account_id(),
-				staker_reward,
-				WithdrawReasons::TRANSFER,
-				ExistenceRequirement::AllowDeath,
-			)?;
-			T::Currency::resolve_creating(&staker, reward_imbalance);
-
-			Self::update_staker_info(&staker, &provider_id, staker_info);
-
-			Self::deposit_event(Event::<T>::Reward {
-				who: staker,
-				provider_id,
-				era,
-				amount: staker_reward,
-			});
-
-			Ok(().into())
-		}
-
-		/// Claim earned operator rewards for the specified era.
+		/// Claim earned provider rewards for the specified era.
 		#[pallet::weight(T::WeightInfo::claim_operator())]
-		pub fn claim_operator(
+		pub fn claim_provider_reward(
 			origin: OriginFor<T>,
 			provider_id: T::ProviderId,
 			#[pallet::compact] era: EraIndex,
 		) -> DispatchResultWithPostInfo {
 			let _ = ensure_signed(origin)?;
 
-			let provider_info = RegisteredProviders::<T>::get(&provider_id)
-				.ok_or(Error::<T>::NotOperatedProvider)?;
+			let provider_info =
+				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
 
-			let current_era = Self::current_era();
-			if let ProviderState::Unregistered(unregistered_era) = provider_info.state {
+			if let ProviderStatus::Unregistered(unregistered_era) = provider_info.status {
 				ensure!(era < unregistered_era, Error::<T>::NotOperatedProvider);
 			}
+
+			let current_era = Self::current_era();
 			ensure!(era < current_era, Error::<T>::EraOutOfBounds);
 
-			let mut provider_stake_info =
-				Self::provider_stake_info(&provider_id, era).unwrap_or_default();
+			let mut provider_era_info =
+				Self::provider_era_info(&provider_id, era).unwrap_or_default();
 			ensure!(
-				!provider_stake_info.provider_reward_claimed,
+				!provider_era_info.provider_reward_claimed,
 				Error::<T>::AlreadyClaimedInThisEra
 			);
-			ensure!(provider_stake_info.total > Zero::zero(), Error::<T>::NotStakedProvider,);
+			ensure!(provider_era_info.total > Zero::zero(), Error::<T>::NotStakedProvider,);
 
-			let reward_and_stake =
-				Self::general_era_info(era).ok_or(Error::<T>::UnknownEraReward)?;
+			let reward_and_stake = Self::era_info(era).ok_or(Error::<T>::UnknownEraReward)?;
 
-			let (operator_reward, _) =
-				Self::operator_stakers_split(&provider_stake_info, &reward_and_stake);
+			let (provider_reward, _) =
+				Self::provider_delegators_split(&provider_era_info, &reward_and_stake);
 
 			let reward_imbalance = T::Currency::withdraw(
 				&Self::account_id(),
-				operator_reward,
+				provider_reward,
 				WithdrawReasons::TRANSFER,
 				ExistenceRequirement::AllowDeath,
 			)?;
-			T::Currency::resolve_creating(&provider_info.operator, reward_imbalance);
+			T::Currency::resolve_creating(&provider_info.owner, reward_imbalance);
 
-			provider_stake_info.provider_reward_claimed = true;
-			ProviderEraStake::<T>::insert(&provider_id, era, provider_stake_info);
+			provider_era_info.provider_reward_claimed = true;
+			ProviderEraInfo::<T>::insert(&provider_id, era, provider_era_info);
 
-			Self::deposit_event(Event::<T>::Reward {
-				who: provider_info.operator.clone(),
+			Self::deposit_event(Event::<T>::Payout {
+				who: provider_info.owner.clone(),
 				provider_id: provider_id.clone(),
 				era,
-				amount: operator_reward,
+				amount: provider_reward,
 			});
+
+			Ok(().into())
+		}
+
+		/// Claim earned delegator rewards for the oldest era.
+		#[pallet::weight(T::WeightInfo::claim_staker())]
+		pub fn claim_delegator_reward(
+			origin: OriginFor<T>,
+			provider_id: T::ProviderId,
+		) -> DispatchResultWithPostInfo {
+			let delegator = ensure_signed(origin)?;
+
+			let mut delegator_info = Self::delegator_info(&delegator, &provider_id);
+			let (era, staked) = delegator_info.claim();
+			ensure!(staked > Zero::zero(), Error::<T>::NotStakedProvider);
+
+			let provider_info =
+				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
+			if let ProviderStatus::Unregistered(unregistered_era) = provider_info.status {
+				ensure!(era < unregistered_era, Error::<T>::NotOperatedProvider);
+			}
+
+			let current_era = Self::current_era();
+			ensure!(era < current_era, Error::<T>::EraOutOfBounds);
+
+			let staking_info = Self::provider_era_info(&provider_id, era).unwrap_or_default();
+			let reward_and_stake = Self::era_info(era).ok_or(Error::<T>::UnknownEraReward)?;
+
+			let (_, delegators_reward) =
+				Self::provider_delegators_split(&staking_info, &reward_and_stake);
+			let delegator_reward =
+				Perbill::from_rational(staked, staking_info.total) * delegators_reward;
+
+			let reward_imbalance = T::Currency::withdraw(
+				&Self::account_id(),
+				delegator_reward,
+				WithdrawReasons::TRANSFER,
+				ExistenceRequirement::AllowDeath,
+			)?;
+			T::Currency::resolve_creating(&delegator, reward_imbalance);
+
+			Self::update_delegator_info(&delegator, &provider_id, delegator_info);
+
+			Self::deposit_event(Event::<T>::Payout {
+				who: delegator,
+				provider_id,
+				era,
+				amount: delegator_reward,
+			});
+
+			Ok(().into())
+		}
+
+		/// Withdraw unregistered provider locked fund.
+		#[pallet::weight(T::WeightInfo::withdraw_from_unregistered_staker())]
+		pub fn provider_withdraw(
+			origin: OriginFor<T>,
+			provider_id: T::ProviderId,
+		) -> DispatchResultWithPostInfo {
+			let _ = ensure_signed(origin)?;
+
+			let mut provider_info =
+				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
+			ensure!(!provider_info.bond_withdrawn, Error::<T>::NothingToWithdraw);
+
+			let unregistered_era = if let ProviderStatus::Unregistered(e) = provider_info.status {
+				e
+			} else {
+				return Err(Error::<T>::NotUnregisteredProvider.into())
+			};
+
+			let current_era = Self::current_era();
+			ensure!(
+				current_era >= unregistered_era + T::UnbondingPeriod::get(),
+				Error::<T>::NothingToWithdraw
+			);
+
+			let provider_era_info =
+				Self::provider_era_info(&provider_id, unregistered_era).unwrap_or_default();
+			let owner = provider_info.owner.clone();
+			let withdraw_amount = provider_era_info.bond;
+
+			let mut ledger = Self::ledger(&owner);
+			ledger.locked = ledger.locked.saturating_sub(withdraw_amount);
+			Self::update_ledger(&owner, ledger);
+
+			let current_era = Self::current_era();
+			EraInfo::<T>::mutate(&current_era, |value| {
+				if let Some(x) = value {
+					x.staked = x.staked.saturating_sub(withdraw_amount);
+					x.locked = x.locked.saturating_sub(withdraw_amount);
+				}
+			});
+
+			provider_info.bond_withdrawn = true;
+			ProviderInfo::<T>::insert(&provider_id, provider_info);
+
+			Self::deposit_event(Event::<T>::Withdrawn { who: owner, amount: withdraw_amount });
+
+			Ok(().into())
+		}
+
+		/// Withdraw delegator's locked fund from a provider that was unregistered.
+		#[pallet::weight(T::WeightInfo::withdraw_from_unregistered_staker())]
+		pub fn delegator_withdraw(
+			origin: OriginFor<T>,
+			provider_id: T::ProviderId,
+		) -> DispatchResultWithPostInfo {
+			let delegator = ensure_signed(origin)?;
+
+			let provider_info =
+				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
+
+			let unregistered_era = if let ProviderStatus::Unregistered(e) = provider_info.status {
+				e
+			} else {
+				return Err(Error::<T>::NotUnregisteredProvider.into())
+			};
+
+			let current_era = Self::current_era();
+			ensure!(
+				current_era >= unregistered_era + T::UnbondingPeriod::get(),
+				Error::<T>::NothingToWithdraw
+			);
+
+			let mut delegator_info = Self::delegator_info(&delegator, &provider_id);
+			let staked_value = delegator_info.latest_staked_value();
+			ensure!(staked_value > Zero::zero(), Error::<T>::NotStakedProvider);
+
+			// Don't allow withdrawal until all rewards have been claimed.
+			let (claimable_era, _) = delegator_info.claim();
+			ensure!(
+				claimable_era >= unregistered_era || claimable_era.is_zero(),
+				Error::<T>::UnclaimedRewardsRemaining
+			);
+
+			let mut ledger = Self::ledger(&delegator);
+			ledger.locked = ledger.locked.saturating_sub(staked_value);
+			Self::update_ledger(&delegator, ledger);
+
+			Self::update_delegator_info(&delegator, &provider_id, Default::default());
+
+			let current_era = Self::current_era();
+			EraInfo::<T>::mutate(&current_era, |value| {
+				if let Some(x) = value {
+					x.staked = x.staked.saturating_sub(staked_value);
+					x.locked = x.locked.saturating_sub(staked_value);
+				}
+			});
+
+			Self::deposit_event(Event::<T>::Withdrawn { who: delegator, amount: staked_value });
 
 			Ok(().into())
 		}
@@ -678,45 +793,55 @@ pub mod pallet {
 			<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance,
 		> for Pallet<T>
 	{
-		fn register(
-			operator: T::AccountId,
+		fn register_provider(
+			account: T::AccountId,
 			provider_id: T::ProviderId,
 			deposit: <<T as Config>::Currency as Currency<
 				<T as frame_system::Config>::AccountId,
 			>>::Balance,
 		) -> DispatchResultWithPostInfo {
 			ensure!(
-				!RegisteredProviders::<T>::contains_key(&provider_id),
+				!ProviderInfo::<T>::contains_key(&provider_id),
 				Error::<T>::AlreadyRegisteredProvider
 			);
 
-			let register_deposit = T::RegisterDeposit::get();
-			ensure!(
-				deposit >= register_deposit + T::MinimumStakingAmount::get(),
-				Error::<T>::InsufficientValue
-			);
+			let mut ledger = Self::ledger(&account);
+			let available_balance = Self::available_balance(&account, &ledger);
+			let amount = deposit.min(available_balance);
+			ensure!(amount >= T::MinProviderStake::get(), Error::<T>::InsufficientValue);
 
-			T::Currency::reserve(&operator, register_deposit)?;
+			ProviderInfo::<T>::insert(&provider_id, ProviderMetadata::new(account.clone()));
 
-			RegisteredProviders::<T>::insert(&provider_id, ProviderInfo::new(operator.clone()));
+			let current_era = Self::current_era();
+			let mut provider_era_info =
+				Self::provider_era_info(&provider_id, current_era).unwrap_or_default();
+			provider_era_info.bond =
+				provider_era_info.bond.checked_add(&deposit).ok_or(ArithmeticError::Overflow)?;
+			provider_era_info.total =
+				provider_era_info.total.checked_add(&deposit).ok_or(ArithmeticError::Overflow)?;
+			ProviderEraInfo::<T>::insert(&provider_id, current_era, provider_era_info);
 
-			let stake_amount = deposit.saturating_sub(register_deposit);
-			Self::stake(RawOrigin::Signed(operator).into(), provider_id, stake_amount)?;
+			ledger.locked = ledger.locked.checked_add(&deposit).ok_or(ArithmeticError::Overflow)?;
+			Self::update_ledger(&account, ledger);
+
+			EraInfo::<T>::mutate(&current_era, |value| {
+				if let Some(x) = value {
+					x.staked = x.staked.saturating_add(amount);
+					x.locked = x.locked.saturating_add(amount);
+				}
+			});
 
 			Ok(().into())
 		}
 
-		fn unregister(provider_id: T::ProviderId) -> DispatchResultWithPostInfo {
-			let mut provider_info = RegisteredProviders::<T>::get(&provider_id)
-				.ok_or(Error::<T>::NotOperatedProvider)?;
-			ensure!(
-				provider_info.state == ProviderState::Registered,
-				Error::<T>::NotOperatedProvider
-			);
+		fn unregister_provider(provider_id: T::ProviderId) -> DispatchResultWithPostInfo {
+			let mut provider =
+				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
+			ensure!(provider.status == ProviderStatus::Registered, Error::<T>::NotOperatedProvider);
 
 			let current_era = Self::current_era();
-			provider_info.state = ProviderState::Unregistered(current_era);
-			RegisteredProviders::<T>::insert(&provider_id, provider_info);
+			provider.status = ProviderStatus::Unregistered(current_era);
+			ProviderInfo::<T>::insert(&provider_id, provider);
 
 			Ok(().into())
 		}
@@ -728,29 +853,29 @@ pub mod pallet {
 			T::PalletId::get().into_account()
 		}
 
-		/// Update the ledger for a staker. This will also update the stash lock.
+		/// Update the ledger for an account.
 		/// This lock will lock the entire funds except paying for further transactions.
-		fn update_ledger(staker: &T::AccountId, ledger: AccountLedger<BalanceOf<T>>) {
+		fn update_ledger(account: &T::AccountId, ledger: AccountLedger<BalanceOf<T>>) {
 			if ledger.is_empty() {
-				Ledger::<T>::remove(&staker);
-				T::Currency::remove_lock(STAKING_ID, &staker);
+				Ledger::<T>::remove(&account);
+				T::Currency::remove_lock(STAKING_ID, &account);
 			} else {
-				T::Currency::set_lock(STAKING_ID, &staker, ledger.locked, WithdrawReasons::all());
-				Ledger::<T>::insert(staker, ledger);
+				T::Currency::set_lock(STAKING_ID, &account, ledger.locked, WithdrawReasons::all());
+				Ledger::<T>::insert(account, ledger);
 			}
 		}
 
-		/// Update the staker info for the `(staker, provider_id)` pairing.
-		/// If staker_info is empty, remove it from the DB. Otherwise, store it.
-		fn update_staker_info(
-			staker: &T::AccountId,
+		/// Update the delegator info for the `(delegator, provider_id)` pairing.
+		/// If delegator info is empty, remove it from the DB. Otherwise, store it.
+		fn update_delegator_info(
+			delegator: &T::AccountId,
 			provider_id: &T::ProviderId,
-			staker_info: StakerInfo<BalanceOf<T>>,
+			metadata: DelegatorMetadata<BalanceOf<T>>,
 		) {
-			if staker_info.is_empty() {
-				GeneralStakerInfo::<T>::remove(staker, provider_id)
+			if metadata.is_empty() {
+				DelegatorInfo::<T>::remove(delegator, provider_id)
 			} else {
-				GeneralStakerInfo::<T>::insert(staker, provider_id, staker_info)
+				DelegatorInfo::<T>::insert(delegator, provider_id, metadata)
 			}
 		}
 
@@ -761,12 +886,12 @@ pub mod pallet {
 		/// This is called just at the beginning of an era.
 		fn reward_balance_snapshot(era: EraIndex, rewards: RewardInfo<BalanceOf<T>>) {
 			// Get the reward and stake information for previous era
-			let mut era_info = Self::general_era_info(era).unwrap_or_default();
+			let mut era_info = Self::era_info(era).unwrap_or_default();
 
 			// Prepare info for the next era
-			GeneralEraInfo::<T>::insert(
+			EraInfo::<T>::insert(
 				era + 1,
-				EraInfo {
+				EraSnapshot {
 					rewards: Default::default(),
 					staked: era_info.staked.clone(),
 					locked: era_info.locked.clone(),
@@ -775,10 +900,10 @@ pub mod pallet {
 
 			// Set reward for the previous era
 			era_info.rewards = rewards;
-			GeneralEraInfo::<T>::insert(era, era_info);
+			EraInfo::<T>::insert(era, era_info);
 		}
 
-		/// Used to copy all `ProviderStakeInfo` from the ending era over to the next era.
+		/// Used to copy all `ProviderEraInfo` from the ending era over to the next era.
 		/// This is the most primitive solution since it scales with number of providers.
 		/// It is possible to provide a hybrid solution which allows laziness but also prevents
 		/// a situation where we don't have access to the required data.
@@ -787,18 +912,17 @@ pub mod pallet {
 
 			let mut consumed_weight = 0;
 
-			for (provider_id, provider_info) in RegisteredProviders::<T>::iter() {
+			for (provider_id, provider_info) in ProviderInfo::<T>::iter() {
 				// Ignore provider if it was unregistered
 				consumed_weight = consumed_weight.saturating_add(T::DbWeight::get().reads(1));
-				if let ProviderState::Unregistered(_) = provider_info.state {
+				if let ProviderStatus::Unregistered(_) = provider_info.status {
 					continue
 				}
 
 				// Copy data from era `X` to era `X + 1`
-				if let Some(mut staking_info) = Self::provider_stake_info(&provider_id, current_era)
-				{
+				if let Some(mut staking_info) = Self::provider_era_info(&provider_id, current_era) {
 					staking_info.provider_reward_claimed = false;
-					ProviderEraStake::<T>::insert(&provider_id, next_era, staking_info);
+					ProviderEraInfo::<T>::insert(&provider_id, next_era, staking_info);
 
 					consumed_weight =
 						consumed_weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
@@ -810,14 +934,14 @@ pub mod pallet {
 			consumed_weight
 		}
 
-		/// Returns available staking balance for the potential staker
-		fn available_staking_balance(
-			staker: &T::AccountId,
+		/// Returns available balance
+		fn available_balance(
+			account: &T::AccountId,
 			ledger: &AccountLedger<BalanceOf<T>>,
 		) -> BalanceOf<T> {
 			// Ensure that staker has enough balance to stake.
 			let free_balance =
-				T::Currency::free_balance(&staker).saturating_sub(T::MinimumRemainingAmount::get());
+				T::Currency::free_balance(&account).saturating_sub(T::MinRemainingAmount::get());
 
 			// Remove already locked funds from the free balance
 			free_balance.saturating_sub(ledger.locked)
@@ -825,36 +949,36 @@ pub mod pallet {
 
 		/// `true` if provider is active, `false` if it has been unregistered
 		fn is_active_provider(provider_id: &T::ProviderId) -> bool {
-			RegisteredProviders::<T>::get(provider_id)
-				.map_or(false, |provider_info| provider_info.state == ProviderState::Registered)
+			ProviderInfo::<T>::get(provider_id)
+				.map_or(false, |provider_info| provider_info.status == ProviderStatus::Registered)
 		}
 
-		/// Calculate reward split between operator and stakers.
+		/// Calculate reward split between provider and delegators.
 		///
-		/// Returns (operator reward, joint stakers reward)
-		pub(crate) fn operator_stakers_split(
-			provider_info: &ProviderStakeInfo<BalanceOf<T>>,
-			era_info: &EraInfo<BalanceOf<T>>,
+		/// Returns (provider reward, delegators reward)
+		pub(crate) fn provider_delegators_split(
+			provider_info: &ProviderEraMetadata<BalanceOf<T>>,
+			era_info: &EraSnapshot<BalanceOf<T>>,
 		) -> (BalanceOf<T>, BalanceOf<T>) {
 			let provider_stake_portion =
 				Perbill::from_rational(provider_info.total, era_info.staked);
 
-			let operator_reward_part = provider_stake_portion * era_info.rewards.operators;
-			let stakers_reward_part = provider_stake_portion * era_info.rewards.stakers;
+			let provider_reward_part = provider_stake_portion * era_info.rewards.providers;
+			let delegators_reward_part = provider_stake_portion * era_info.rewards.delegators;
 
-			(operator_reward_part, stakers_reward_part)
+			(provider_reward_part, delegators_reward_part)
 		}
 
-		/// Adds rewards to the reward pool.
-		pub fn rewards(imbalance: NegativeImbalanceOf<T>) {
-			let operators_part = T::OperatorRewardPercentage::get() * imbalance.peek();
-			let stakers_part = imbalance.peek().saturating_sub(operators_part);
+		/// Handle pallet's imbalance (block reward and project payment).
+		pub fn handle_imbalance(imbalance: NegativeImbalanceOf<T>) {
+			let delegators_part = T::ProviderCommission::get() * imbalance.peek();
+			let providers_part = imbalance.peek().saturating_sub(delegators_part);
 
 			BlockRewardAccumulator::<T>::mutate(|accumulated_reward| {
-				accumulated_reward.operators =
-					accumulated_reward.operators.saturating_add(operators_part);
-				accumulated_reward.stakers =
-					accumulated_reward.stakers.saturating_add(stakers_part);
+				accumulated_reward.providers =
+					accumulated_reward.providers.saturating_add(providers_part);
+				accumulated_reward.delegators =
+					accumulated_reward.delegators.saturating_add(delegators_part);
 			});
 
 			T::Currency::resolve_creating(&Self::account_id(), imbalance);

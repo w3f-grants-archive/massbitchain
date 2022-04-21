@@ -1,3 +1,5 @@
+//! # dAPI Staking Pallet
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, HasCompact};
@@ -24,12 +26,10 @@ pub use weights::WeightInfo;
 pub type BalanceOf<T> =
 	<<T as Config>::Currency as Currency<<T as system::Config>::AccountId>>::Balance;
 
-/// Counter for the number of eras that have passed.
 pub type EraIndex = u32;
 
-/// Provider state descriptor
 #[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
-enum ProviderState {
+enum ProviderStatus {
 	/// Provider is registered and active.
 	Registered,
 	/// Provider has been unregistered and is inactive.
@@ -38,15 +38,16 @@ enum ProviderState {
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct ProviderInfo<AccountId> {
-	operator: AccountId,
-	state: ProviderState,
-	unreserved: bool,
+pub struct ProviderMetadata<AccountId> {
+	owner: AccountId,
+	status: ProviderStatus,
+	/// Indicates whether bond were withdrawed by unregistered provider or not.
+	bond_withdrawn: bool,
 }
 
-impl<AccountId> ProviderInfo<AccountId> {
-	fn new(operator: AccountId) -> Self {
-		Self { operator, state: ProviderState::Registered, unreserved: false }
+impl<AccountId> ProviderMetadata<AccountId> {
+	fn new(owner: AccountId) -> Self {
+		Self { owner, status: ProviderStatus::Registered, bond_withdrawn: false }
 	}
 }
 
@@ -57,8 +58,6 @@ pub enum Forcing {
 	/// Not forcing anything - just let whatever happen.
 	NotForcing,
 	/// Force a new era, then reset to `NotForcing` as soon as it is done.
-	/// Note that this will force to trigger an election until a new era is triggered, if the
-	/// election failed, the next session end will trigger a new election again, until success.
 	ForceNew,
 }
 
@@ -68,20 +67,20 @@ impl Default for Forcing {
 	}
 }
 
-/// A record of rewards allocated for operators and stakers
+/// A record of rewards allocated for providers and delegators.
 #[derive(PartialEq, Eq, Clone, Default, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub struct RewardInfo<Balance: HasCompact> {
-	/// Total amount of rewards for operators in an era
+	/// Total amount of rewards for providers in an era
 	#[codec(compact)]
-	pub operators: Balance,
-	/// Total amount of rewards for stakers in an era
+	pub providers: Balance,
+	/// Total amount of rewards for delegators in an era
 	#[codec(compact)]
-	pub stakers: Balance,
+	pub delegators: Balance,
 }
 
-/// A record for total rewards and total amount staked for an era
+/// A record for total rewards and total staked amount for an era.
 #[derive(PartialEq, Eq, Clone, Default, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct EraInfo<Balance: HasCompact> {
+pub struct EraSnapshot<Balance: HasCompact> {
 	/// Total amount of earned rewards for an era
 	pub rewards: RewardInfo<Balance>,
 	/// Total staked amount in an era
@@ -94,142 +93,147 @@ pub struct EraInfo<Balance: HasCompact> {
 
 /// Used to split total EraPayout among providers.
 /// Each tuple (provider, era) has this structure.
-/// This will be used to reward operator and his stakers.
+/// This will be used to reward provider and its delegators.
 #[derive(Clone, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
-pub struct ProviderStakeInfo<Balance: HasCompact> {
-	/// Total staked amount.
+pub struct ProviderEraMetadata<Balance: HasCompact> {
+	/// Provider bond amount.
+	#[codec(compact)]
+	pub bond: Balance,
+	/// Sum of delegators' staked + self.bond
 	#[codec(compact)]
 	pub total: Balance,
-	/// Total number of active stakers
+	/// Total number of active delegators.
 	#[codec(compact)]
-	number_of_stakers: u32,
-	/// Indicates whether rewards were claimed for this era or not
+	number_of_delegators: u32,
+	/// Indicates whether rewards were claimed by provider for this era or not.
 	provider_reward_claimed: bool,
 }
 
-/// Used to represent how much was staked in a particular era.
-/// E.g. `{staked: 1000, era: 5}` means that in era `5`, staked amount was 1000.
+/// Used to represent how much was delegated in a particular era.
+/// E.g. `{amount: 1000, era: 5}` means that in era `5`, delegated amount was 1000.
 #[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-pub struct EraStake<Balance: AtLeast32BitUnsigned + Copy> {
-	/// Staked amount in era
+pub struct EraDelegation<Balance: AtLeast32BitUnsigned + Copy> {
+	/// Delegated amount in era
 	#[codec(compact)]
-	staked: Balance,
-	/// Staked era
+	amount: Balance,
+	/// Delegated era
 	#[codec(compact)]
 	era: EraIndex,
 }
 
-impl<Balance: AtLeast32BitUnsigned + Copy> EraStake<Balance> {
-	/// Create a new instance of `EraStake` with given values
-	fn new(staked: Balance, era: EraIndex) -> Self {
-		Self { staked, era }
+impl<Balance: AtLeast32BitUnsigned + Copy> EraDelegation<Balance> {
+	/// Create a new instance of `EraDelegation` with given values
+	fn new(amount: Balance, era: EraIndex) -> Self {
+		Self { amount, era }
 	}
 }
 
-/// Used to provide a compact and bounded storage for information about stakes in unclaimed eras.
+/// Used to provide a compact and bounded storage for information about delegations in unclaimed
+/// eras.
 ///
 /// # Example
-/// For simplicity, the following example will represent `EraStake` using `<era, stake>` notation.
-/// Let us assume we have the following vector in `StakerInfo` struct.
+/// For simplicity, the following example will represent `EraDelegation` using `<era, amount>`
+/// notation. Let us assume we have the following vector in `DelegatorMetadata` struct.
 ///
 /// `[<5, 1000>, <6, 1500>, <8, 2100>, <9, 0>, <11, 500>]`
 ///
 /// This tells us which eras are unclaimed and how much it was staked in each era.
 /// The interpretation is the following:
 /// 1. In era **5**, staked amount was **1000** (interpreted from `<5, 1000>`)
-/// 2. In era **6**, staker staked additional **500**, increasing total staked amount to **1500**
+/// 2. In era **6**, delegator staked additional **500**, increasing total staked amount to **1500**
 /// 3. No entry for era **7** exists which means there were no changes from the former entry.
 ///    This means that in era **7**, staked amount was also **1500**
-/// 4. In era **8**, staker staked an additional **600**, increasing total stake to **2100**
-/// 5. In era **9**, staker unstaked everything from the provider (interpreted from `<9, 0>`)
+/// 4. In era **8**, delegator staked an additional **600**, increasing total stake to **2100**
+/// 5. In era **9**, delegator unstaked everything from the provider (interpreted from `<9, 0>`)
 /// 6. No changes were made in era **10** so we can interpret this same as the previous entry which
-/// means **0** staked amount. 7. In era **11**, staker staked **500** on the provider, making his
-/// stake active again after 2 eras of inactivity.
+/// means **0** staked amount.
+/// 7. In era **11**, delegator staked **500** on the provider, making his stake active again after
+/// 2 eras of inactivity.
 ///
-/// **NOTE:** It is important to understand that staker **DID NOT** claim any rewards during this
+/// **NOTE:** It is important to understand that delegator **DID NOT** claim any rewards during this
 /// period.
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-pub struct StakerInfo<Balance: AtLeast32BitUnsigned + Copy> {
+pub struct DelegatorMetadata<Balance: AtLeast32BitUnsigned + Copy> {
 	// Size of this list would be limited by a configurable constant
-	stakes: Vec<EraStake<Balance>>,
+	delegations: Vec<EraDelegation<Balance>>,
 }
 
-impl<Balance: AtLeast32BitUnsigned + Copy> StakerInfo<Balance> {
-	/// `true` if no active stakes and unclaimed eras exist, `false` otherwise
+impl<Balance: AtLeast32BitUnsigned + Copy> DelegatorMetadata<Balance> {
+	/// `true` if no active delegations and unclaimed eras exist, `false` otherwise
 	fn is_empty(&self) -> bool {
-		self.stakes.is_empty()
+		self.delegations.is_empty()
 	}
 
-	/// number of `EraStake` chunks
+	/// Number of `EraDelegation` chunks
 	fn len(&self) -> u32 {
-		self.stakes.len() as u32
+		self.delegations.len() as u32
 	}
 
-	/// Stakes some value in the specified era.
+	/// Stake some amount in the specified era.
 	///
-	/// User should ensure that given era is either equal or greater than the
-	/// latest available era in the staking info.
+	/// Delegator should ensure that given era is either equal or greater than the
+	/// latest available era in the delegation info.
 	///
 	/// # Example
 	///
 	/// The following example demonstrates how internal vector changes when `stake` is called:
 	///
-	/// `stakes: [<5, 1000>, <7, 1300>]`
+	/// `delegations: [<5, 1000>, <7, 1300>]`
 	/// * `stake(7, 100)` will result in `[<5, 1000>, <7, 1400>]`
 	/// * `stake(9, 200)` will result in `[<5, 1000>, <7, 1400>, <9, 1600>]`
-	fn stake(&mut self, current_era: EraIndex, value: Balance) -> Result<(), &str> {
-		if let Some(era_stake) = self.stakes.last_mut() {
-			if era_stake.era > current_era {
+	fn stake(&mut self, current_era: EraIndex, amount: Balance) -> Result<(), &str> {
+		if let Some(delegation) = self.delegations.last_mut() {
+			if delegation.era > current_era {
 				return Err("Unexpected era".into())
 			}
 
-			let new_stake_value = era_stake.staked.saturating_add(value);
-			if current_era == era_stake.era {
-				*era_stake = EraStake::new(new_stake_value, current_era)
+			let new_stake_amount = delegation.amount.saturating_add(amount);
+			if current_era == delegation.era {
+				*delegation = EraDelegation::new(new_stake_amount, current_era)
 			} else {
-				self.stakes.push(EraStake::new(new_stake_value, current_era))
+				self.delegations.push(EraDelegation::new(new_stake_amount, current_era))
 			}
 		} else {
-			self.stakes.push(EraStake::new(value, current_era))
+			self.delegations.push(EraDelegation::new(amount, current_era))
 		}
 
 		Ok(())
 	}
 
-	/// Unstakes some value in the specified era.
+	/// Unstake some amount in the specified era.
 	///
-	/// User should ensure that given era is either equal or greater than the
-	/// latest available era in the staking info.
+	/// Delegator should ensure that given era is either equal or greater than the
+	/// latest available era in the delegation info.
 	///
 	/// # Example 1
 	///
-	/// `stakes: [<5, 1000>, <7, 1300>]`
+	/// `delegations: [<5, 1000>, <7, 1300>]`
 	/// * `unstake(7, 100)` will result in `[<5, 1000>, <7, 1200>]`
 	/// * `unstake(9, 400)` will result in `[<5, 1000>, <7, 1200>, <9, 800>]`
 	/// * `unstake(10, 800)` will result in `[<5, 1000>, <7, 1200>, <9, 800>, <0, 10>]`
 	///
 	/// # Example 2
 	///
-	/// `stakes: [<5, 1000>]`
+	/// `delegations: [<5, 1000>]`
 	/// * `unstake(1000, 0)` will result in `[]`
 	///
 	/// Note that if no unclaimed eras remain, vector will be cleared.
-	fn unstake(&mut self, current_era: EraIndex, value: Balance) -> Result<(), &str> {
-		if let Some(era_stake) = self.stakes.last_mut() {
-			if era_stake.era > current_era {
+	fn unstake(&mut self, current_era: EraIndex, amount: Balance) -> Result<(), &str> {
+		if let Some(delegation) = self.delegations.last_mut() {
+			if delegation.era > current_era {
 				return Err("Unexpected era".into())
 			}
 
-			let new_stake_value = era_stake.staked.saturating_sub(value);
-			if current_era == era_stake.era {
-				*era_stake = EraStake::new(new_stake_value, current_era)
+			let new_stake_amount = delegation.amount.saturating_sub(amount);
+			if current_era == delegation.era {
+				*delegation = EraDelegation::new(new_stake_amount, current_era)
 			} else {
-				self.stakes.push(EraStake::new(new_stake_value, current_era))
+				self.delegations.push(EraDelegation::new(new_stake_amount, current_era))
 			}
 
 			// Removes unstaked values if they're no longer valid for comprehension
-			if !self.stakes.is_empty() && self.stakes[0].staked.is_zero() {
-				self.stakes.remove(0);
+			if !self.delegations.is_empty() && self.delegations[0].amount.is_zero() {
+				self.delegations.remove(0);
 			}
 		}
 
@@ -245,7 +249,7 @@ impl<Balance: AtLeast32BitUnsigned + Copy> StakerInfo<Balance> {
 	/// The following example will demonstrate how the internal vec changes when `claim` is called
 	/// consecutively.
 	///
-	/// `stakes: [<5, 1000>, <7, 1300>, <8, 0>, <15, 3000>]`
+	/// `delegations: [<5, 1000>, <7, 1300>, <8, 0>, <15, 3000>]`
 	///
 	/// 1. `claim()` will return `(5, 1000)`
 	///     Internal vector is modified to `[<6, 1000>, <7, 1300>, <8, 0>, <15, 3000>]`
@@ -255,40 +259,42 @@ impl<Balance: AtLeast32BitUnsigned + Copy> StakerInfo<Balance> {
 	///
 	/// 3. `claim()` will return `(7, 1300)`.
 	///    Internal vector is modified to `[<15, 3000>]`
-	///    Note that `0` staked period is discarded since nothing can be claimed there.
+	///    Note that `0` bonded period is discarded since nothing can be claimed there.
 	///
 	/// 4. `claim()` will return `(15, 3000)`.
 	///    Internal vector is modified to `[16, 3000]`
 	///
 	/// Repeated calls would continue to modify vector following the same rule as in *4.*
 	fn claim(&mut self) -> (EraIndex, Balance) {
-		if let Some(era_stake) = self.stakes.first() {
-			let era_stake = *era_stake;
+		if let Some(delegation) = self.delegations.first() {
+			let delegation = *delegation;
 
-			if self.stakes.len() == 1 || self.stakes[1].era > era_stake.era + 1 {
-				self.stakes[0] =
-					EraStake { staked: era_stake.staked, era: era_stake.era.saturating_add(1) }
+			if self.delegations.len() == 1 || self.delegations[1].era > delegation.era + 1 {
+				self.delegations[0] = EraDelegation {
+					amount: delegation.amount,
+					era: delegation.era.saturating_add(1),
+				}
 			} else {
-				// in case: self.stakes[1].era == era_stake.era + 1
-				self.stakes.remove(0);
+				// in case: self.delegations[1].era == delegation.era + 1
+				self.delegations.remove(0);
 			}
 
 			// Removes unstaked values if they're no longer valid for comprehension
-			if !self.stakes.is_empty() && self.stakes[0].staked.is_zero() {
-				self.stakes.remove(0);
+			if !self.delegations.is_empty() && self.delegations[0].amount.is_zero() {
+				self.delegations.remove(0);
 			}
 
-			(era_stake.era, era_stake.staked)
+			(delegation.era, delegation.amount)
 		} else {
 			(0, Zero::zero())
 		}
 	}
 
 	/// Latest staked value.
-	/// E.g. if staker is fully unstaked, this will return `Zero`.
+	/// E.g. if delegator is fully unstaked, this will return `Zero`.
 	/// Otherwise returns a non-zero balance.
 	pub fn latest_staked_value(&self) -> Balance {
-		self.stakes.last().map_or(Zero::zero(), |x| x.staked)
+		self.delegations.last().map_or(Zero::zero(), |x| x.amount)
 	}
 }
 
@@ -314,8 +320,7 @@ where
 	}
 }
 
-/// Contains unlocking chunks.
-/// This is a convenience struct that provides various utility methods to help with unbonding
+/// Contains unlocking chunks which provides various utility methods to help with unbonding
 /// handling.
 #[derive(Clone, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
 pub struct UnbondingInfo<Balance: AtLeast32BitUnsigned + Default + Copy> {

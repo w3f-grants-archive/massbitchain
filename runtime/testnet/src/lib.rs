@@ -82,8 +82,8 @@ impl_opaque_keys! {
 }
 
 /// Constant values used within the runtime.
-pub const MILLIMBT: Balance = 1_000_000_000_000_000;
-pub const MBT: Balance = 1_000 * MILLIMBT;
+pub const MILLIMBTT: Balance = 1_000_000_000_000_000;
+pub const MBTT: Balance = 1_000 * MILLIMBTT;
 
 /// This determines the average expected block time that we are targeting.
 /// Blocks will be produced at a minimum duration defined by `SLOT_DURATION`.
@@ -358,16 +358,15 @@ type NegativeImbalance = <Balances as Currency<AccountId>>::NegativeImbalance;
 
 pub struct BeneficiaryPayout();
 impl pallet_block_reward::BeneficiaryPayout<NegativeImbalance> for BeneficiaryPayout {
-	fn validators(_: NegativeImbalance) {
-	}
+	fn validators(_: NegativeImbalance) {}
 
 	fn providers(reward: NegativeImbalance) {
-		DapiStaking::rewards(reward)
+		DapiStaking::handle_imbalance(reward)
 	}
 }
 
 parameter_types! {
-	pub const RewardAmount: Balance = 2_664 * MILLIMBT;
+	pub const RewardAmount: Balance = 2_664 * MILLIMBTT;
 }
 
 impl pallet_block_reward::Config for Runtime {
@@ -379,11 +378,11 @@ impl pallet_block_reward::Config for Runtime {
 
 parameter_types! {
 	pub const BlockPerEra: BlockNumber = 200;
-	pub const RegisterDeposit: Balance = 90 * MBT;
+	pub const RegisterDeposit: Balance = 90 * MBTT;
 	pub const OperatorRewardPercentage: Perbill = Perbill::from_percent(80);
 	pub const MaxNumberOfStakersPerProvider: u32 = 512;
-	pub const MinimumStakingAmount: Balance = 10 * MBT;
-	pub const MinimumRemainingAmount: Balance = 1 * MBT;
+	pub const MinimumStakingAmount: Balance = 10 * MBTT;
+	pub const MinimumRemainingAmount: Balance = 1 * MBTT;
 	pub const MaxUnlockingChunks: u32 = 2;
 	pub const UnbondingPeriod: u32 = 2;
 	pub const MaxEraStakeValues: u32 = 5;
@@ -393,15 +392,15 @@ impl pallet_dapi_staking::Config for Runtime {
 	type Currency = Balances;
 	type ProviderId = MassbitId;
 	type BlockPerEra = BlockPerEra;
-	type OperatorRewardPercentage = OperatorRewardPercentage;
-	type RegisterDeposit = RegisterDeposit;
-	type MaxNumberOfStakersPerProvider = MaxNumberOfStakersPerProvider;
-	type MinimumStakingAmount = MinimumStakingAmount;
+	type ProviderCommission = OperatorRewardPercentage;
+	type MinProviderStake = RegisterDeposit;
+	type MaxDelegatorsPerProvider = MaxNumberOfStakersPerProvider;
+	type MinDelegatorStake = MinimumStakingAmount;
 	type PalletId = DapiStakingPalletId;
-	type MinimumRemainingAmount = MinimumRemainingAmount;
+	type MinRemainingAmount = MinimumRemainingAmount;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
 	type UnbondingPeriod = UnbondingPeriod;
-	type MaxEraStakeValues = MaxEraStakeValues;
+	type MaxEraDelegationValues = MaxEraStakeValues;
 	type Event = Event;
 	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<Runtime>;
 }
@@ -409,7 +408,7 @@ impl pallet_dapi_staking::Config for Runtime {
 pub struct OnProjectPayment;
 impl OnUnbalanced<NegativeImbalance> for OnProjectPayment {
 	fn on_nonzero_unbalanced(amount: NegativeImbalance) {
-		DapiStaking::rewards(amount);
+		DapiStaking::handle_imbalance(amount);
 	}
 }
 
