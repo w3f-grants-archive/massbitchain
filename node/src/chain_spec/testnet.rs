@@ -84,7 +84,7 @@ fn make_genesis(
 		},
 		block_reward: BlockRewardConfig {
 			// Make sure sum is 100
-			reward_config: pallet_block_reward::RewardDistributionConfig {
+			reward_config: pallet_block_reward::DistributionConfig {
 				providers_percent: Perbill::from_percent(100),
 				validators_percent: Perbill::zero(),
 			},

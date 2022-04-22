@@ -52,33 +52,6 @@ benchmarks! {
 
 	}: _(RawOrigin::Signed(consumer.clone()), project_id.clone(), amount.clone())
 
-	register_provider {
-		initialize::<T>();
-
-		let operator: T::AccountId = account("operator", 10000, SEED);
-		T::Currency::make_free_balance_be(&operator, BalanceOf::<T>::max_value());
-
-		let provider_id = T::MassbitId::default();
-		let amount = BalanceOf::<T>::max_value() / 2u32.into();
-
-		let chain_id = "eth.mainnet".into();
-
-	}: _(RawOrigin::Signed(operator.clone()), provider_id.clone(), ProviderType::Gateway, chain_id, amount.clone())
-
-	unregister_provider {
-		initialize::<T>();
-
-		let operator: T::AccountId = account("operator", 10000, SEED);
-		T::Currency::make_free_balance_be(&operator, BalanceOf::<T>::max_value());
-
-		let provider_id = T::MassbitId::default();
-		let amount = BalanceOf::<T>::max_value() / 2u32.into();
-
-		let chain_id = "eth.mainnet".into();
-		Dapi::<T>::register_provider(RawOrigin::Signed(operator.clone()).into(), provider_id.clone(), ProviderType::Gateway, chain_id, amount.clone())?;
-
-	}: _(RawOrigin::Signed(operator.clone()), provider_id.clone())
-
 	add_chain_id {
 		ChainIds::<T>::kill();
 

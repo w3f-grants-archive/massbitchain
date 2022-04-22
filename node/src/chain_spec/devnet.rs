@@ -82,14 +82,14 @@ fn make_genesis(
 			balances: endowed_accounts
 				.iter()
 				.cloned()
-				.map(|k| (k, 100_000_000_000_000_000_000_000))
+				.map(|k| (k, 10_000_000_000_000_000_000_000))
 				.collect(),
 		},
 		block_reward: BlockRewardConfig {
 			// Make sure sum is 100
-			reward_config: pallet_block_reward::RewardDistributionConfig {
-				providers_percent: Perbill::from_percent(100),
-				validators_percent: Perbill::zero(),
+			reward_config: pallet_block_reward::DistributionConfig {
+				providers_percent: Perbill::from_percent(50),
+				validators_percent: Perbill::from_percent(50),
 			},
 		},
 		validator_set: ValidatorSetConfig {

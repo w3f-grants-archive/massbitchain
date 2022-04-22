@@ -259,9 +259,9 @@ parameter_types! {
 }
 
 impl pallet_validator_set::Config for Runtime {
-	type Event = Event;
 	type AddRemoveOrigin = EnsureRoot<AccountId>;
 	type MinAuthorities = MinAuthorities;
+	type Event = Event;
 }
 
 parameter_types! {
@@ -270,6 +270,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Runtime {
+	type Event = Event;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_validator_set::ValidatorOf<Self>;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
@@ -278,7 +279,6 @@ impl pallet_session::Config for Runtime {
 	type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = SessionKeys;
 	type WeightInfo = ();
-	type Event = Event;
 }
 
 parameter_types! {
@@ -339,15 +339,15 @@ where
 
 impl pallet_im_online::Config for Runtime {
 	type AuthorityId = ImOnlineId;
-	type Event = Event;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type ValidatorSet = ValidatorSet;
-	type ReportUnresponsiveness = ValidatorSet;
-	type UnsignedPriority = ImOnlineUnsignedPriority;
-	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 	type MaxKeys = MaxKeys;
 	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
 	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
+	type Event = Event;
+	type ValidatorSet = ValidatorSet;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type ReportUnresponsiveness = ValidatorSet;
+	type UnsignedPriority = ImOnlineUnsignedPriority;
+	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -374,15 +374,14 @@ impl pallet_block_reward::Config for Runtime {
 	type BeneficiaryPayout = BeneficiaryPayout;
 	type RewardAmount = RewardAmount;
 	type Event = Event;
+	type WeightInfo = pallet_block_reward::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
-	pub const BlockPerEra: BlockNumber = 200;
 	pub const RegisterDeposit: Balance = 90 * MBTT;
 	pub const OperatorRewardPercentage: Perbill = Perbill::from_percent(80);
 	pub const MaxNumberOfStakersPerProvider: u32 = 512;
 	pub const MinimumStakingAmount: Balance = 10 * MBTT;
-	pub const MinimumRemainingAmount: Balance = 1 * MBTT;
 	pub const MaxUnlockingChunks: u32 = 2;
 	pub const UnbondingPeriod: u32 = 2;
 	pub const MaxEraStakeValues: u32 = 5;
@@ -391,16 +390,14 @@ parameter_types! {
 impl pallet_dapi_staking::Config for Runtime {
 	type Currency = Balances;
 	type ProviderId = MassbitId;
-	type BlockPerEra = BlockPerEra;
-	type ProviderCommission = OperatorRewardPercentage;
+	type ProviderRewardsPercentage = OperatorRewardPercentage;
 	type MinProviderStake = RegisterDeposit;
 	type MaxDelegatorsPerProvider = MaxNumberOfStakersPerProvider;
 	type MinDelegatorStake = MinimumStakingAmount;
 	type PalletId = DapiStakingPalletId;
-	type MinRemainingAmount = MinimumRemainingAmount;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
 	type UnbondingPeriod = UnbondingPeriod;
-	type MaxEraDelegationValues = MaxEraStakeValues;
+	type MaxEraStakeValues = MaxEraStakeValues;
 	type Event = Event;
 	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<Runtime>;
 }

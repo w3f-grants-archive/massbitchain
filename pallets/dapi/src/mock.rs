@@ -73,8 +73,8 @@ impl frame_system::Config for TestRuntime {
 	type BlockWeights = ();
 	type BlockLength = ();
 	type Origin = Origin;
-	type Index = u64;
 	type Call = Call;
+	type Index = u64;
 	type BlockNumber = BlockNumber;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
@@ -101,15 +101,15 @@ parameter_types! {
 }
 
 impl pallet_balances::Config for TestRuntime {
-	type MaxLocks = MaxLocks;
-	type MaxReserves = ();
-	type ReserveIdentifier = [u8; 8];
 	type Balance = Balance;
-	type Event = Event;
 	type DustRemoval = ();
+	type Event = Event;
 	type ExistentialDeposit = ExistentialDeposit;
 	type AccountStore = System;
 	type WeightInfo = ();
+	type MaxLocks = MaxLocks;
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
 }
 
 parameter_types! {
