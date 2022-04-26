@@ -72,13 +72,16 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		ProjectExists,
+		ProjectDNE,
 		AlreadyExist,
 		InactiveProvider,
 		BadChainId,
-		NotExist,
+		ProviderDNE,
 		NotOwner,
 		PermissionDenied,
 		InvalidProviderStatus,
+		ChainIdDNE,
 	}
 
 	#[pallet::event]
@@ -92,7 +95,7 @@ pub mod pallet {
 		},
 		ProjectDeposited {
 			project_id: T::MassbitId,
-			quota: u128,
+			new_quota: u128,
 		},
 		ProjectReachedQuota {
 			project_id: T::MassbitId,
@@ -100,7 +103,7 @@ pub mod pallet {
 		ProviderRegistered {
 			provider_id: T::MassbitId,
 			provider_type: ProviderType,
-			operator: T::AccountId,
+			owner: T::AccountId,
 			chain_id: Vec<u8>,
 		},
 		ProviderActivated {
@@ -175,12 +178,10 @@ pub mod pallet {
 			#[pallet::compact] deposit: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let consumer = ensure_signed(origin)?;
-
-			ensure!(!<Projects<T>>::contains_key(&project_id), Error::<T>::AlreadyExist);
-
+			ensure!(!<Projects<T>>::contains_key(&project_id), Error::<T>::ProjectExists);
 			let bounded_chain_id: BoundedVec<u8, T::ChainIdMaxLength> =
 				chain_id.clone().try_into().map_err(|_| Error::<T>::BadChainId)?;
-			ensure!(Self::chain_ids().contains(&bounded_chain_id), Error::<T>::NotExist);
+			ensure!(Self::chain_ids().contains(&bounded_chain_id), Error::<T>::ChainIdDNE);
 
 			let payment = T::Currency::withdraw(
 				&consumer,
@@ -189,12 +190,11 @@ pub mod pallet {
 				ExistenceRequirement::KeepAlive,
 			)?;
 			T::OnProjectPayment::on_unbalanced(payment);
-
 			let quota = Self::calculate_quota(deposit);
-			let project =
-				Project { consumer: consumer.clone(), chain_id: bounded_chain_id, quota, usage: 0 };
-
-			<Projects<T>>::insert(&project_id, project);
+			<Projects<T>>::insert(
+				&project_id,
+				Project { consumer: consumer.clone(), chain_id: bounded_chain_id, quota, usage: 0 },
+			);
 
 			Self::deposit_event(Event::ProjectRegistered { project_id, consumer, chain_id, quota });
 			Ok(().into())
@@ -207,8 +207,10 @@ pub mod pallet {
 			#[pallet::compact] deposit: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let consumer = ensure_signed(origin)?;
+			let mut project = Projects::<T>::get(&project_id).ok_or(Error::<T>::ProjectDNE)?;
 
-			let mut project = Projects::<T>::get(&project_id).ok_or(Error::<T>::NotExist)?;
+			let quota = project.quota.saturating_add(Self::calculate_quota(deposit));
+			project.quota = quota;
 
 			let payment = T::Currency::withdraw(
 				&consumer,
@@ -217,17 +219,13 @@ pub mod pallet {
 				ExistenceRequirement::KeepAlive,
 			)?;
 			T::OnProjectPayment::on_unbalanced(payment);
-
-			let quota = project.quota.saturating_add(Self::calculate_quota(deposit));
-			project.quota = quota;
-
 			<Projects<T>>::insert(&project_id, project);
 
-			Self::deposit_event(Event::ProjectDeposited { project_id, quota });
+			Self::deposit_event(Event::ProjectDeposited { project_id, new_quota: quota });
 			Ok(().into())
 		}
 
-		#[pallet::weight(100)]
+		#[pallet::weight((0, DispatchClass::Normal, Pays::No))]
 		pub fn submit_project_usage(
 			origin: OriginFor<T>,
 			project_id: T::MassbitId,
@@ -235,40 +233,35 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let regulator = ensure_signed(origin)?;
 			ensure!(Self::regulators().contains(&regulator), Error::<T>::PermissionDenied);
-
-			let mut project = Projects::<T>::get(&project_id).ok_or(Error::<T>::NotExist)?;
+			let mut project = Projects::<T>::get(&project_id).ok_or(Error::<T>::ProjectDNE)?;
 			project.usage = project.usage.saturating_add(usage).min(project.quota);
 			if project.usage == project.quota {
 				Self::deposit_event(Event::ProjectReachedQuota { project_id: project_id.clone() });
 			};
-
 			Projects::<T>::insert(&project_id, project);
-
 			Ok(().into())
 		}
 
-		#[pallet::weight(100)]
+		#[pallet::weight((0, DispatchClass::Normal, Pays::No))]
 		pub fn register_provider(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
 			provider_type: ProviderType,
-			operator: T::AccountId,
+			owner: T::AccountId,
 			chain_id: Vec<u8>,
 		) -> DispatchResultWithPostInfo {
 			let regulator = ensure_signed(origin)?;
 			ensure!(Self::regulators().contains(&regulator), Error::<T>::PermissionDenied);
-
 			ensure!(!<Providers<T>>::contains_key(&provider_id), Error::<T>::AlreadyExist);
-
 			let bounded_chain_id: BoundedVec<u8, T::ChainIdMaxLength> =
 				chain_id.clone().try_into().map_err(|_| Error::<T>::BadChainId)?;
-			ensure!(Self::chain_ids().contains(&bounded_chain_id), Error::<T>::NotExist);
+			ensure!(Self::chain_ids().contains(&bounded_chain_id), Error::<T>::ChainIdDNE);
 
 			<Providers<T>>::insert(
 				&provider_id,
 				Provider {
 					provider_type,
-					owner: operator.clone(),
+					owner: owner.clone(),
 					chain_id: bounded_chain_id,
 					status: ProviderStatus::Registered,
 				},
@@ -277,30 +270,27 @@ pub mod pallet {
 			Self::deposit_event(Event::ProviderRegistered {
 				provider_id,
 				provider_type,
-				operator,
+				owner,
 				chain_id,
 			});
-
 			Ok(().into())
 		}
 
-		#[pallet::weight(100)]
+		#[pallet::weight(T::WeightInfo::deposit_provider())]
 		pub fn deposit_provider(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
 			#[pallet::compact] deposit: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
-			let operator = ensure_signed(origin)?;
-
-			let mut provider = Providers::<T>::get(&provider_id).ok_or(Error::<T>::NotExist)?;
-			ensure!(provider.owner == operator, Error::<T>::NotOwner);
+			let owner = ensure_signed(origin)?;
+			let mut provider = Providers::<T>::get(&provider_id).ok_or(Error::<T>::ProviderDNE)?;
+			ensure!(provider.owner == owner, Error::<T>::NotOwner);
 			ensure!(
 				provider.status == ProviderStatus::Registered,
 				Error::<T>::InvalidProviderStatus
 			);
 
-			T::DapiStaking::register_provider(operator.clone(), provider_id.clone(), deposit)?;
-
+			T::DapiStaking::register_provider(owner.clone(), provider_id.clone(), deposit)?;
 			provider.status = ProviderStatus::Active;
 			Providers::<T>::insert(&provider_id, provider.clone());
 
@@ -308,23 +298,20 @@ pub mod pallet {
 				provider_id,
 				provider_type: provider.provider_type,
 			});
-
 			Ok(().into())
 		}
 
-		#[pallet::weight(100)]
+		#[pallet::weight(T::WeightInfo::unregister_provider())]
 		pub fn unregister_provider(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
 		) -> DispatchResultWithPostInfo {
 			let account = ensure_signed(origin)?;
-
-			let mut provider = Providers::<T>::get(&provider_id).ok_or(Error::<T>::NotExist)?;
+			let mut provider = Providers::<T>::get(&provider_id).ok_or(Error::<T>::ProviderDNE)?;
 			ensure!(provider.owner == account, Error::<T>::NotOwner);
 			ensure!(provider.status == ProviderStatus::Active, Error::<T>::InvalidProviderStatus);
 
 			T::DapiStaking::unregister_provider(provider_id.clone())?;
-
 			provider.status =
 				ProviderStatus::InActive { reason: ProviderDeactivateReason::UnRegistered };
 			Providers::<T>::insert(&provider_id, provider.clone());
@@ -334,7 +321,6 @@ pub mod pallet {
 				provider_type: provider.provider_type,
 				reason: ProviderDeactivateReason::UnRegistered,
 			});
-
 			Ok(().into())
 		}
 
@@ -346,12 +332,10 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let regulator = ensure_signed(origin)?;
 			ensure!(Self::regulators().contains(&regulator), Error::<T>::PermissionDenied);
-
-			let mut provider = Self::providers(&provider_id).ok_or(Error::<T>::NotExist)?;
+			let mut provider = Self::providers(&provider_id).ok_or(Error::<T>::ProviderDNE)?;
 			ensure!(provider.status == ProviderStatus::Active, Error::<T>::InvalidProviderStatus);
 
 			T::DapiStaking::unregister_provider(provider_id.clone())?;
-
 			provider.status = ProviderStatus::InActive { reason };
 			Providers::<T>::insert(&provider_id, provider.clone());
 
@@ -360,7 +344,6 @@ pub mod pallet {
 				provider_type: provider.provider_type,
 				reason,
 			});
-
 			Ok(().into())
 		}
 
@@ -370,7 +353,6 @@ pub mod pallet {
 			account_id: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let _ = ensure_root(origin);
-
 			let mut regulators = Regulators::<T>::get();
 			ensure!(!regulators.contains(&account_id), Error::<T>::AlreadyExist);
 
@@ -378,7 +360,6 @@ pub mod pallet {
 			Regulators::<T>::put(&regulators);
 
 			Self::deposit_event(Event::RegulatorAdded { account_id });
-
 			Ok(().into())
 		}
 
@@ -388,25 +369,21 @@ pub mod pallet {
 			account_id: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let _ = ensure_root(origin);
-
 			let mut regulators = Regulators::<T>::get();
-			ensure!(regulators.contains(&account_id), Error::<T>::NotExist);
+			ensure!(regulators.contains(&account_id), Error::<T>::PermissionDenied);
 
 			regulators.remove(&account_id);
 			Regulators::<T>::put(&regulators);
 
 			Self::deposit_event(Event::RegulatorRemoved { account_id });
-
 			Ok(().into())
 		}
 
 		#[pallet::weight(T::WeightInfo::add_chain_id())]
 		pub fn add_chain_id(origin: OriginFor<T>, chain_id: Vec<u8>) -> DispatchResultWithPostInfo {
 			let _ = ensure_root(origin);
-
 			let bounded_chain_id: BoundedVec<u8, T::ChainIdMaxLength> =
 				chain_id.clone().try_into().map_err(|_| Error::<T>::BadChainId)?;
-
 			let mut chain_ids = ChainIds::<T>::get();
 			ensure!(!chain_ids.contains(&bounded_chain_id), Error::<T>::AlreadyExist);
 
@@ -414,7 +391,6 @@ pub mod pallet {
 			ChainIds::<T>::put(&chain_ids);
 
 			Self::deposit_event(Event::ChainIdAdded { chain_id });
-
 			Ok(().into())
 		}
 
@@ -424,18 +400,15 @@ pub mod pallet {
 			chain_id: Vec<u8>,
 		) -> DispatchResultWithPostInfo {
 			let _ = ensure_root(origin);
-
 			let bounded_chain_id: BoundedVec<u8, T::ChainIdMaxLength> =
 				chain_id.clone().try_into().map_err(|_| Error::<T>::BadChainId)?;
-
 			let mut chain_ids = ChainIds::<T>::get();
-			ensure!(chain_ids.contains(&bounded_chain_id), Error::<T>::NotExist);
+			ensure!(chain_ids.contains(&bounded_chain_id), Error::<T>::ChainIdDNE);
 
 			chain_ids.remove(&bounded_chain_id);
 			ChainIds::<T>::put(&chain_ids);
 
 			Self::deposit_event(Event::ChainIdRemoved { chain_id });
-
 			Ok(().into())
 		}
 	}
@@ -515,8 +488,13 @@ where
 		_len: usize,
 	) -> TransactionValidity {
 		if let Some(local_call) = call.is_sub_type() {
-			if let Call::report_provider_offence { .. } = local_call {
-				ensure!(<Regulators<T>>::get().contains(who), InvalidTransaction::BadSigner);
+			match local_call {
+				Call::submit_project_usage { .. } |
+				Call::register_provider { .. } |
+				Call::report_provider_offence { .. } => {
+					ensure!(<Regulators<T>>::get().contains(who), InvalidTransaction::BadSigner);
+				},
+				_ => {},
 			}
 		}
 		Ok(ValidTransaction::default())

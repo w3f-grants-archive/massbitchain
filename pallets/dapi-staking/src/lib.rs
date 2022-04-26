@@ -261,7 +261,7 @@ pub mod pallet {
 			let provider_info =
 				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::ProviderDNE)?;
 			ensure!(
-				provider_info.status == ProviderStatus::Registered,
+				provider_info.status == ProviderStatus::Active,
 				Error::<T>::NotOperatedProvider
 			);
 			ensure!(provider_info.owner == who, Error::<T>::NotOwnedProvider);
@@ -298,7 +298,7 @@ pub mod pallet {
 			let provider_info =
 				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::ProviderDNE)?;
 			ensure!(
-				provider_info.status == ProviderStatus::Registered,
+				provider_info.status == ProviderStatus::Active,
 				Error::<T>::NotOperatedProvider
 			);
 			ensure!(provider_info.owner == who, Error::<T>::NotOwnedProvider);
@@ -351,8 +351,8 @@ pub mod pallet {
 				<ProviderEraInfo<T>>::get(&provider_id, current_era).unwrap_or_default();
 			let mut delegation = <DelegationInfo<T>>::get(&delegator, &provider_id);
 			ensure!(
-				!delegation.latest_staked_value().is_zero()
-					|| provider_era_info.delegator_count <= T::MaxDelegatorsPerProvider::get(),
+				!delegation.latest_staked_value().is_zero() ||
+					provider_era_info.delegator_count <= T::MaxDelegatorsPerProvider::get(),
 				Error::<T>::MaxNumberOfStakersExceeded
 			);
 			if delegation.latest_staked_value().is_zero() {
@@ -482,7 +482,7 @@ pub mod pallet {
 			let _ = ensure_signed(origin)?;
 			let provider_info =
 				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
-			if let ProviderStatus::Unregistered(unregistered_era) = provider_info.status {
+			if let ProviderStatus::Inactive(unregistered_era) = provider_info.status {
 				ensure!(era < unregistered_era, Error::<T>::NotOperatedProvider);
 			}
 
@@ -532,7 +532,7 @@ pub mod pallet {
 
 			let provider_info =
 				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
-			if let ProviderStatus::Unregistered(unregistered_era) = provider_info.status {
+			if let ProviderStatus::Inactive(unregistered_era) = provider_info.status {
 				ensure!(era < unregistered_era, Error::<T>::NotOperatedProvider);
 			}
 
@@ -577,10 +577,10 @@ pub mod pallet {
 			let mut provider_info =
 				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
 			ensure!(!provider_info.bond_withdrawn, Error::<T>::NothingToWithdraw);
-			let unregistered_era = if let ProviderStatus::Unregistered(e) = provider_info.status {
+			let unregistered_era = if let ProviderStatus::Inactive(e) = provider_info.status {
 				e
 			} else {
-				return Err(Error::<T>::NotUnregisteredProvider.into());
+				return Err(Error::<T>::NotUnregisteredProvider.into())
 			};
 			let current_era = <Era<T>>::get().current;
 			ensure!(
@@ -610,10 +610,10 @@ pub mod pallet {
 			let delegator = ensure_signed(origin)?;
 			let provider_info =
 				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::NotOperatedProvider)?;
-			let unregistered_era = if let ProviderStatus::Unregistered(e) = provider_info.status {
+			let unregistered_era = if let ProviderStatus::Inactive(e) = provider_info.status {
 				e
 			} else {
-				return Err(Error::<T>::NotUnregisteredProvider.into());
+				return Err(Error::<T>::NotUnregisteredProvider.into())
 			};
 			let current_era = <Era<T>>::get().current;
 			ensure!(
@@ -679,10 +679,10 @@ pub mod pallet {
 		fn unregister_provider(provider_id: T::ProviderId) -> DispatchResultWithPostInfo {
 			let mut provider =
 				ProviderInfo::<T>::get(&provider_id).ok_or(Error::<T>::ProviderDNE)?;
-			ensure!(provider.status == ProviderStatus::Registered, Error::<T>::NotOperatedProvider);
+			ensure!(provider.status == ProviderStatus::Active, Error::<T>::NotOperatedProvider);
 
 			let current_era = <Era<T>>::get().current;
-			provider.status = ProviderStatus::Unregistered(current_era);
+			provider.status = ProviderStatus::Inactive(current_era);
 			ProviderInfo::<T>::insert(&provider_id, provider);
 
 			let provider_era_info =
@@ -740,8 +740,8 @@ pub mod pallet {
 			let mut consumed_weight = 0;
 			for (provider_id, provider) in ProviderInfo::<T>::iter() {
 				consumed_weight = consumed_weight.saturating_add(T::DbWeight::get().reads(1));
-				if let ProviderStatus::Unregistered(_) = provider.status {
-					continue;
+				if let ProviderStatus::Inactive(_) = provider.status {
+					continue
 				}
 
 				if let Some(mut info) = <ProviderEraInfo<T>>::get(&provider_id, era) {
@@ -757,10 +757,9 @@ pub mod pallet {
 			consumed_weight
 		}
 
-		/// `true` if provider is active, `false` if it has been unregistered
 		fn is_active_provider(provider_id: &T::ProviderId) -> bool {
 			ProviderInfo::<T>::get(provider_id)
-				.map_or(false, |provider_info| provider_info.status == ProviderStatus::Registered)
+				.map_or(false, |provider_info| provider_info.status == ProviderStatus::Active)
 		}
 
 		/// Calculate reward split between provider and delegators.
