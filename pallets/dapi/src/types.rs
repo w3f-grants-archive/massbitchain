@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use super::*;
-use frame_support::pallet_prelude::*;
 
 #[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub struct Project<AccountId, ChainId> {
@@ -28,7 +27,7 @@ pub enum ProviderStatus {
 #[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub struct Provider<AccountId, ChainId> {
 	pub provider_type: ProviderType,
-	pub operator: AccountId,
+	pub owner: AccountId,
 	pub chain_id: ChainId,
 	pub status: ProviderStatus,
 }

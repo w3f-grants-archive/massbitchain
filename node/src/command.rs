@@ -1,12 +1,12 @@
 #[cfg(feature = "frame-benchmarking")]
 use crate::primitives::Block;
 use crate::{
-	chain_spec::{self, devnet},
+	chain_spec,
 	cli::{Cli, Subcommand},
 };
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
 
-use super::service;
+use super::service::{self, devnet, testnet};
 
 trait IdentifyChain {
 	fn is_dev(&self) -> bool;
@@ -37,7 +37,9 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, St
 	Ok(match id {
 		"dev" => Box::new(chain_spec::devnet::get_chain_spec()),
 		"testnet" => Box::new(chain_spec::testnet::get_chain_spec()),
-		path => Box::new(devnet::DevnetChainSpec::from_json_file(std::path::PathBuf::from(path))?),
+		path => Box::new(chain_spec::devnet::DevnetChainSpec::from_json_file(
+			std::path::PathBuf::from(path),
+		)?),
 	})
 }
 
@@ -95,7 +97,13 @@ pub fn run() -> sc_cli::Result<()> {
 		#[cfg(feature = "frame-benchmarking")]
 		Some(Subcommand::Benchmark(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
-			runner.sync_run(|config| cmd.run::<Block, devnet::Executor>(config))
+			let chain_spec = &runner.config().chain_spec;
+
+			if chain_spec.is_testnet() {
+				runner.sync_run(|config| cmd.run::<Block, testnet::Executor>(config))
+			} else {
+				runner.sync_run(|config| cmd.run::<Block, devnet::Executor>(config))
+			}
 		},
 		None => {
 			let runner = cli.create_runner(&cli.run)?;

@@ -313,6 +313,7 @@ where
 			frame_system::CheckNonce::<Runtime>::from(nonce),
 			frame_system::CheckWeight::<Runtime>::new(),
 			pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
+			pallet_dapi::PreValidateRegulatorCalls::<Runtime>::new(),
 		);
 		let raw_payload = SignedPayload::new(call, extra)
 			.map_err(|e| {
@@ -368,7 +369,7 @@ impl pallet_block_reward::BeneficiaryPayout<NegativeImbalance> for BeneficiaryPa
 }
 
 parameter_types! {
-	pub const RewardAmount: Balance = 2_000 * MILLIMBTD;
+	pub const RewardAmount: Balance = 1_000 * MILLIMBTD;
 }
 
 impl pallet_block_reward::Config for Runtime {
@@ -376,15 +377,14 @@ impl pallet_block_reward::Config for Runtime {
 	type BeneficiaryPayout = BeneficiaryPayout;
 	type RewardAmount = RewardAmount;
 	type Event = Event;
+	type WeightInfo = pallet_block_reward::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
-	pub const BlockPerEra: BlockNumber = 60;
 	pub const RegisterDeposit: Balance = 90 * MBTD;
-	pub const OperatorRewardPercentage: Perbill = Perbill::from_percent(80);
+	pub const ProviderRewardsPercentage: Perbill = Perbill::from_percent(80);
 	pub const MaxNumberOfStakersPerProvider: u32 = 10;
 	pub const MinimumStakingAmount: Balance = 10 * MBTD;
-	pub const MinimumRemainingAmount: Balance = 1 * MBTD;
 	pub const MaxUnlockingChunks: u32 = 2;
 	pub const UnbondingPeriod: u32 = 2;
 	pub const MaxEraStakeValues: u32 = 5;
@@ -393,17 +393,15 @@ parameter_types! {
 impl pallet_dapi_staking::Config for Runtime {
 	type Currency = Balances;
 	type ProviderId = MassbitId;
-	type BlockPerEra = BlockPerEra;
-	type ProviderCommission = OperatorRewardPercentage;
+	type ProviderRewardsPercentage = ProviderRewardsPercentage;
 	type MinProviderStake = RegisterDeposit;
 	type MaxDelegatorsPerProvider = MaxNumberOfStakersPerProvider;
 	type MinDelegatorStake = MinimumStakingAmount;
-	type PalletId = DapiStakingPalletId;
-	type MinRemainingAmount = MinimumRemainingAmount;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
 	type UnbondingPeriod = UnbondingPeriod;
-	type MaxEraDelegationValues = MaxEraStakeValues;
+	type MaxEraStakeValues = MaxEraStakeValues;
 	type Event = Event;
+	type PalletId = DapiStakingPalletId;
 	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<Runtime>;
 }
 
@@ -493,6 +491,7 @@ pub type SignedExtra = (
 	frame_system::CheckNonce<Runtime>,
 	frame_system::CheckWeight<Runtime>,
 	pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+	pallet_dapi::PreValidateRegulatorCalls<Runtime>,
 );
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic = generic::UncheckedExtrinsic<Address, Call, Signature, SignedExtra>;
@@ -648,6 +647,7 @@ impl_runtime_apis! {
 
 			let mut list = Vec::<BenchmarkList>::new();
 
+			list_benchmark!(list, extra, pallet_block_reward, BlockReward);
 			list_benchmark!(list, extra, pallet_dapi, Dapi);
 			list_benchmark!(list, extra, pallet_dapi_staking, DapiStaking);
 
@@ -679,6 +679,7 @@ impl_runtime_apis! {
 			let params = (&config, &whitelist);
 
 			add_benchmark!(params, batches, frame_system, SystemBench::<Runtime>);
+			add_benchmark!(params, batches, pallet_block_reward, BlockReward);
 			add_benchmark!(params, batches, pallet_dapi, Dapi);
 			add_benchmark!(params, batches, pallet_dapi_staking, DapiStaking);
 

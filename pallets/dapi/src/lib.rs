@@ -2,22 +2,24 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use frame_support::{
+	pallet_prelude::{DispatchResultWithPostInfo, *},
+	traits::{Currency, ExistenceRequirement, IsSubType, OnUnbalanced, WithdrawReasons},
+};
+use sp_runtime::traits::{DispatchInfoOf, Scale, SignedExtension};
+use sp_std::{collections::btree_set::BTreeSet, fmt::Debug, prelude::*};
+
+pub mod traits;
 pub mod types;
 pub mod weights;
 
-use frame_support::{
-	pallet_prelude::DispatchResultWithPostInfo,
-	traits::{Currency, ExistenceRequirement, OnUnbalanced, WithdrawReasons},
-};
-use sp_runtime::traits::Scale;
-use sp_std::{collections::btree_set::BTreeSet, prelude::*};
-
 #[cfg(any(feature = "runtime-benchmarks"))]
-pub mod benchmarking;
+pub mod benchmarks;
 #[cfg(test)]
 mod mock;
 
 pub use pallet::*;
+pub use traits::*;
 pub use types::*;
 pub use weights::WeightInfo;
 
@@ -27,7 +29,6 @@ type BalanceOf<T> =
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -267,7 +268,7 @@ pub mod pallet {
 				&provider_id,
 				Provider {
 					provider_type,
-					operator: operator.clone(),
+					owner: operator.clone(),
 					chain_id: bounded_chain_id,
 					status: ProviderStatus::Registered,
 				},
@@ -283,7 +284,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight(T::WeightInfo::register_provider())]
+		#[pallet::weight(100)]
 		pub fn deposit_provider(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
@@ -292,7 +293,7 @@ pub mod pallet {
 			let operator = ensure_signed(origin)?;
 
 			let mut provider = Providers::<T>::get(&provider_id).ok_or(Error::<T>::NotExist)?;
-			ensure!(provider.operator == operator, Error::<T>::NotOwner);
+			ensure!(provider.owner == operator, Error::<T>::NotOwner);
 			ensure!(
 				provider.status == ProviderStatus::Registered,
 				Error::<T>::InvalidProviderStatus
@@ -311,7 +312,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight(T::WeightInfo::unregister_provider())]
+		#[pallet::weight(100)]
 		pub fn unregister_provider(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
@@ -319,7 +320,7 @@ pub mod pallet {
 			let account = ensure_signed(origin)?;
 
 			let mut provider = Providers::<T>::get(&provider_id).ok_or(Error::<T>::NotExist)?;
-			ensure!(provider.operator == account, Error::<T>::NotOwner);
+			ensure!(provider.owner == account, Error::<T>::NotOwner);
 			ensure!(provider.status == ProviderStatus::Active, Error::<T>::InvalidProviderStatus);
 
 			T::DapiStaking::unregister_provider(provider_id.clone())?;
@@ -337,7 +338,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight(100)]
+		#[pallet::weight((0, DispatchClass::Normal, Pays::No))]
 		pub fn report_provider_offence(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
@@ -440,7 +441,7 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		fn calculate_quota(amount: BalanceOf<T>) -> u128 {
+		pub fn calculate_quota(amount: BalanceOf<T>) -> u128 {
 			TryInto::<u128>::try_into(amount)
 				.ok()
 				.unwrap_or_default()
@@ -449,12 +450,75 @@ pub mod pallet {
 	}
 }
 
-pub trait DapiStaking<AccountId, Provider, Balance> {
-	fn register_provider(
-		origin: AccountId,
-		provider_id: Provider,
-		deposit: Balance,
-	) -> DispatchResultWithPostInfo;
+/// Validate regulators calls prior to execution. Needed to avoid a DoS attack since they are
+/// otherwise free to place on chain.
+#[derive(Encode, Decode, Clone, Eq, PartialEq, TypeInfo)]
+#[scale_info(skip_type_params(T))]
+pub struct PreValidateRegulatorCalls<T: Config + Send + Sync>(sp_std::marker::PhantomData<T>)
+where
+	<T as frame_system::Config>::Call: IsSubType<Call<T>>;
 
-	fn unregister_provider(provider_id: Provider) -> DispatchResultWithPostInfo;
+impl<T: Config + Send + Sync> Debug for PreValidateRegulatorCalls<T>
+where
+	<T as frame_system::Config>::Call: IsSubType<Call<T>>,
+{
+	#[cfg(feature = "std")]
+	fn fmt(&self, f: &mut sp_std::fmt::Formatter) -> sp_std::fmt::Result {
+		write!(f, "PreValidateRegulatorCalls")
+	}
+
+	#[cfg(not(feature = "std"))]
+	fn fmt(&self, _: &mut sp_std::fmt::Formatter) -> sp_std::fmt::Result {
+		Ok(())
+	}
+}
+
+impl<T: Config + Send + Sync> PreValidateRegulatorCalls<T>
+where
+	<T as frame_system::Config>::Call: IsSubType<Call<T>>,
+{
+	/// Create new `SignedExtension` to check runtime version.
+	pub fn new() -> Self {
+		Self(sp_std::marker::PhantomData)
+	}
+}
+
+impl<T: Config + Send + Sync> SignedExtension for PreValidateRegulatorCalls<T>
+where
+	<T as frame_system::Config>::Call: IsSubType<Call<T>>,
+{
+	const IDENTIFIER: &'static str = "PreValidateRegulatorCalls";
+	type AccountId = T::AccountId;
+	type Call = <T as frame_system::Config>::Call;
+	type AdditionalSigned = ();
+	type Pre = ();
+
+	fn additional_signed(&self) -> Result<Self::AdditionalSigned, TransactionValidityError> {
+		Ok(())
+	}
+
+	fn pre_dispatch(
+		self,
+		who: &Self::AccountId,
+		call: &Self::Call,
+		info: &DispatchInfoOf<Self::Call>,
+		len: usize,
+	) -> Result<Self::Pre, TransactionValidityError> {
+		Ok(self.validate(who, call, info, len).map(|_| ())?)
+	}
+
+	fn validate(
+		&self,
+		who: &Self::AccountId,
+		call: &Self::Call,
+		_info: &DispatchInfoOf<Self::Call>,
+		_len: usize,
+	) -> TransactionValidity {
+		if let Some(local_call) = call.is_sub_type() {
+			if let Call::report_provider_offence { .. } = local_call {
+				ensure!(<Regulators<T>>::get().contains(who), InvalidTransaction::BadSigner);
+			}
+		}
+		Ok(ValidTransaction::default())
+	}
 }
