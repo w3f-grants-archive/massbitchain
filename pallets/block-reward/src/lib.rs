@@ -11,7 +11,7 @@ use sp_runtime::{traits::CheckedAdd, Perbill};
 use sp_std::vec;
 
 #[cfg(any(feature = "runtime-benchmarks"))]
-pub mod benchmarking;
+pub mod benchmarks;
 #[cfg(test)]
 mod mock;
 
@@ -168,7 +168,7 @@ impl DistributionConfig {
 			if let Some(result) = result {
 				accumulator = result
 			} else {
-				return false
+				return false;
 			}
 		}
 

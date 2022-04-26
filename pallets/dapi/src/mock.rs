@@ -25,27 +25,14 @@ pub(crate) type EraIndex = u32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<TestRuntime>;
 type Block = frame_system::mocking::MockBlock<TestRuntime>;
 
-/// Value shouldn't be less than 2 for testing purposes, otherwise we cannot test certain corner
-/// cases.
 pub(crate) const EXISTENTIAL_DEPOSIT: Balance = 2;
-pub(crate) const MAX_NUMBER_OF_STAKERS: u32 = 5;
-/// Value shouldn't be less than 2 for testing purposes, otherwise we cannot test certain corner
-/// cases.
-pub(crate) const MINIMUM_STAKING_AMOUNT: Balance = 10;
-pub(crate) const OPERATOR_REWARD_PERCENTAGE: u32 = 80;
-pub(crate) const MINIMUM_REMAINING_AMOUNT: Balance = 1;
+pub(crate) const MIN_PROVIDER_STAKE: Balance = 10;
+pub(crate) const PROVIDER_REWARD_PERCENTAGE: u32 = 80;
+pub(crate) const MAX_NUMBER_OF_DELEGATORS: u32 = 5;
+pub(crate) const MIN_DELEGATOR_STAKE: Balance = 10;
 pub(crate) const MAX_UNLOCKING_CHUNKS: u32 = 4;
 pub(crate) const UNBONDING_PERIOD: EraIndex = 3;
 pub(crate) const MAX_ERA_STAKE_VALUES: u32 = 8;
-
-// Do note that this needs to at least be 3 for tests to be valid. It can be greater but not
-// smaller.
-pub(crate) const BLOCKS_PER_ERA: BlockNumber = 3;
-
-pub(crate) const REGISTER_DEPOSIT: Balance = 10;
-
-// ignore MILLIMBT for easier test handling.
-// reward for dapi staking will be BLOCK_REWARD/2 = 1000
 pub(crate) const BLOCK_REWARD: Balance = 1000;
 
 construct_runtime!(
@@ -58,7 +45,6 @@ construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
 		DapiStaking: pallet_dapi_staking::{Pallet, Call, Storage, Event<T>},
-		Dapi: pallet_dapi::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -124,13 +110,11 @@ impl pallet_timestamp::Config for TestRuntime {
 }
 
 parameter_types! {
-	pub const RegisterDeposit: Balance = REGISTER_DEPOSIT;
-	pub const BlockPerEra: BlockNumber = BLOCKS_PER_ERA;
-	pub const MaxNumberOfStakersPerProvider: u32 = MAX_NUMBER_OF_STAKERS;
-	pub const MinimumStakingAmount: Balance = MINIMUM_STAKING_AMOUNT;
-	pub const OperatorRewardPercentage: Perbill = Perbill::from_percent(OPERATOR_REWARD_PERCENTAGE);
+	pub const MinProviderStake: Balance = MIN_PROVIDER_STAKE;
+	pub const MaxDelegatorsPerProvider: u32 = MAX_NUMBER_OF_DELEGATORS;
+	pub const MinDelegatorStake: Balance = MIN_DELEGATOR_STAKE;
+	pub const ProviderRewardsPercentage: Perbill = Perbill::from_percent(PROVIDER_REWARD_PERCENTAGE);
 	pub const DapiStakingPalletId: PalletId = PalletId(*b"mokdpstk");
-	pub const MinimumRemainingAmount: Balance = MINIMUM_REMAINING_AMOUNT;
 	pub const MaxUnlockingChunks: u32 = MAX_UNLOCKING_CHUNKS;
 	pub const UnbondingPeriod: EraIndex = UNBONDING_PERIOD;
 	pub const MaxEraStakeValues: u32 = MAX_ERA_STAKE_VALUES;
@@ -139,18 +123,16 @@ parameter_types! {
 impl pallet_dapi_staking::Config for TestRuntime {
 	type Event = Event;
 	type Currency = Balances;
-	type BlockPerEra = BlockPerEra;
-	type RegisterDeposit = RegisterDeposit;
-	type OperatorRewardPercentage = OperatorRewardPercentage;
 	type ProviderId = MockProvider;
-	type MaxNumberOfStakersPerProvider = MaxNumberOfStakersPerProvider;
-	type MinimumStakingAmount = MinimumStakingAmount;
-	type PalletId = DapiStakingPalletId;
-	type MinimumRemainingAmount = MinimumRemainingAmount;
-	type MaxUnlockingChunks = MaxUnlockingChunks;
-	type UnbondingPeriod = UnbondingPeriod;
+	type ProviderRewardsPercentage = ProviderRewardsPercentage;
+	type MinProviderStake = MinProviderStake;
+	type MaxDelegatorsPerProvider = MaxDelegatorsPerProvider;
+	type MinDelegatorStake = MinDelegatorStake;
 	type MaxEraStakeValues = MaxEraStakeValues;
-	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<TestRuntime>;
+	type UnbondingPeriod = UnbondingPeriod;
+	type MaxUnlockingChunks = MaxUnlockingChunks;
+	type PalletId = DapiStakingPalletId;
+	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, Debug, scale_info::TypeInfo)]

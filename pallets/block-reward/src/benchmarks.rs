@@ -32,6 +32,6 @@ mod tests {
 
 impl_benchmark_test_suite!(
 	Pallet,
-	crate::benchmarking::tests::new_test_ext(),
+	crate::benchmarks::tests::new_test_ext(),
 	crate::mock::TestRuntime,
 );

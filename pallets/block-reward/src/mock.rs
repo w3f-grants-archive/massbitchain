@@ -20,8 +20,6 @@ pub(crate) type Balance = u128;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<TestRuntime>;
 type Block = frame_system::mocking::MockBlock<TestRuntime>;
 
-/// Value shouldn't be less than 2 for testing purposes, otherwise we cannot test certain corner
-/// cases.
 pub(crate) const EXISTENTIAL_DEPOSIT: Balance = 2;
 
 construct_runtime!(
@@ -99,8 +97,6 @@ impl pallet_timestamp::Config for TestRuntime {
 }
 
 pub(crate) const BLOCK_REWARD: Balance = 1_000_000;
-
-// Fake accounts used to simulate reward beneficiaries balances
 pub(crate) const VALIDATOR_POT: PalletId = PalletId(*b"mokvaldt");
 pub(crate) const PROVIDER_POT: PalletId = PalletId(*b"mokprovd");
 

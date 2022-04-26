@@ -14,7 +14,7 @@ pub mod types;
 pub mod weights;
 
 #[cfg(any(feature = "runtime-benchmarks"))]
-pub mod benchmarking;
+pub mod benchmarks;
 #[cfg(test)]
 mod mock;
 
@@ -312,7 +312,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight(T::WeightInfo::unregister_provider())]
+		#[pallet::weight(100)]
 		pub fn unregister_provider(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
@@ -338,7 +338,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight((1_000, DispatchClass::Normal, Pays::No))]
+		#[pallet::weight((0, DispatchClass::Normal, Pays::No))]
 		pub fn report_provider_offence(
 			origin: OriginFor<T>,
 			provider_id: T::MassbitId,
@@ -441,7 +441,7 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		fn calculate_quota(amount: BalanceOf<T>) -> u128 {
+		pub fn calculate_quota(amount: BalanceOf<T>) -> u128 {
 			TryInto::<u128>::try_into(amount)
 				.ok()
 				.unwrap_or_default()
