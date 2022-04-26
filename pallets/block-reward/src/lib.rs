@@ -168,7 +168,7 @@ impl DistributionConfig {
 			if let Some(result) = result {
 				accumulator = result
 			} else {
-				return false;
+				return false
 			}
 		}
 

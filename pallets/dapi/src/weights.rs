@@ -42,6 +42,10 @@ pub trait WeightInfo {
 	#[rustfmt::skip]
 	fn deposit_project() -> Weight;
 	#[rustfmt::skip]
+	fn deposit_provider() -> Weight;
+	#[rustfmt::skip]
+	fn unregister_provider() -> Weight;
+	#[rustfmt::skip]
 	fn add_chain_id() -> Weight;
 	#[rustfmt::skip]
 	fn remove_chain_id() -> Weight;
@@ -60,7 +64,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: DapiStaking RewardAccumulator (r:1 w:1)
 	#[rustfmt::skip]
 	fn register_project() -> Weight {
-		(36_000_000 as Weight)
+		(37_000_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(5 as Weight))
 			.saturating_add(T::DbWeight::get().writes(4 as Weight))
 	}
@@ -69,9 +73,32 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: DapiStaking RewardAccumulator (r:1 w:1)
 	#[rustfmt::skip]
 	fn deposit_project() -> Weight {
-		(29_000_000 as Weight)
+		(30_000_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(4 as Weight))
 			.saturating_add(T::DbWeight::get().writes(4 as Weight))
+	}
+	// Storage: Dapi Providers (r:1 w:1)
+	// Storage: DapiStaking ProviderInfo (r:1 w:1)
+	// Storage: System Account (r:1 w:1)
+	// Storage: DapiStaking Era (r:1 w:0)
+	// Storage: DapiStaking EraState (r:1 w:1)
+	// Storage: DapiStaking ProviderEraInfo (r:0 w:1)
+	#[rustfmt::skip]
+	fn deposit_provider() -> Weight {
+		(28_000_000 as Weight)
+			.saturating_add(T::DbWeight::get().reads(5 as Weight))
+			.saturating_add(T::DbWeight::get().writes(5 as Weight))
+	}
+	// Storage: Dapi Providers (r:1 w:1)
+	// Storage: DapiStaking ProviderInfo (r:1 w:1)
+	// Storage: DapiStaking Era (r:1 w:0)
+	// Storage: DapiStaking ProviderEraInfo (r:1 w:0)
+	// Storage: DapiStaking EraState (r:1 w:1)
+	#[rustfmt::skip]
+	fn unregister_provider() -> Weight {
+		(22_000_000 as Weight)
+			.saturating_add(T::DbWeight::get().reads(5 as Weight))
+			.saturating_add(T::DbWeight::get().writes(3 as Weight))
 	}
 	// Storage: Dapi ChainIds (r:1 w:1)
 	#[rustfmt::skip]
@@ -111,7 +138,7 @@ impl WeightInfo for () {
 	// Storage: DapiStaking RewardAccumulator (r:1 w:1)
 	#[rustfmt::skip]
 	fn register_project() -> Weight {
-		(36_000_000 as Weight)
+		(37_000_000 as Weight)
 			.saturating_add(RocksDbWeight::get().reads(5 as Weight))
 			.saturating_add(RocksDbWeight::get().writes(4 as Weight))
 	}
@@ -120,9 +147,32 @@ impl WeightInfo for () {
 	// Storage: DapiStaking RewardAccumulator (r:1 w:1)
 	#[rustfmt::skip]
 	fn deposit_project() -> Weight {
-		(29_000_000 as Weight)
+		(30_000_000 as Weight)
 			.saturating_add(RocksDbWeight::get().reads(4 as Weight))
 			.saturating_add(RocksDbWeight::get().writes(4 as Weight))
+	}
+	// Storage: Dapi Providers (r:1 w:1)
+	// Storage: DapiStaking ProviderInfo (r:1 w:1)
+	// Storage: System Account (r:1 w:1)
+	// Storage: DapiStaking Era (r:1 w:0)
+	// Storage: DapiStaking EraState (r:1 w:1)
+	// Storage: DapiStaking ProviderEraInfo (r:0 w:1)
+	#[rustfmt::skip]
+	fn deposit_provider() -> Weight {
+		(28_000_000 as Weight)
+			.saturating_add(RocksDbWeight::get().reads(5 as Weight))
+			.saturating_add(RocksDbWeight::get().writes(5 as Weight))
+	}
+	// Storage: Dapi Providers (r:1 w:1)
+	// Storage: DapiStaking ProviderInfo (r:1 w:1)
+	// Storage: DapiStaking Era (r:1 w:0)
+	// Storage: DapiStaking ProviderEraInfo (r:1 w:0)
+	// Storage: DapiStaking EraState (r:1 w:1)
+	#[rustfmt::skip]
+	fn unregister_provider() -> Weight {
+		(22_000_000 as Weight)
+			.saturating_add(RocksDbWeight::get().reads(5 as Weight))
+			.saturating_add(RocksDbWeight::get().writes(3 as Weight))
 	}
 	// Storage: Dapi ChainIds (r:1 w:1)
 	#[rustfmt::skip]

@@ -217,7 +217,7 @@ benchmarks! {
 	}: _(RawOrigin::Signed(delegator.clone()), provider_id.clone())
 	verify {
 		let delegation = <DelegationInfo<T>>::get(&delegator, &provider_id);
-		 assert!(delegation.latest_staked_value().is_zero());
+		assert!(delegation.latest_staked_value().is_zero());
 		assert_last_event::<T>(Event::<T>::Withdrawn{who: delegator, amount: T::MinDelegatorStake::get()}.into());
 	}
 }

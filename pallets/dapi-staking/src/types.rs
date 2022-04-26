@@ -9,8 +9,8 @@ use sp_std::{ops::Add, prelude::*};
 
 #[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum ProviderStatus {
-	Registered,
-	Unregistered(EraIndex),
+	Active,
+	Inactive(EraIndex),
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -22,7 +22,7 @@ pub struct ProviderMetadata<AccountId> {
 
 impl<AccountId> ProviderMetadata<AccountId> {
 	pub fn new(owner: AccountId) -> Self {
-		Self { owner, status: ProviderStatus::Registered, bond_withdrawn: false }
+		Self { owner, status: ProviderStatus::Active, bond_withdrawn: false }
 	}
 }
 
