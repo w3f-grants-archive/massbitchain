@@ -1,6 +1,6 @@
-//! Devnet specifications.
+//! Development specifications.
 
-use devnet_runtime::{
+use local_runtime::{
 	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
 	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, ImOnlineConfig, SessionConfig,
 	SessionKeys, Signature, SudoConfig, SystemConfig, ValidatorSetConfig,
@@ -17,7 +17,7 @@ use sp_runtime::{
 
 use super::get_from_seed;
 
-pub type DevnetChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
+pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
 fn session_keys(aura: AuraId, grandpa: GrandpaId, im_online: ImOnlineId) -> SessionKeys {
 	SessionKeys { aura, grandpa, im_online }
@@ -32,13 +32,13 @@ pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId, ImOnl
 	)
 }
 
-pub fn get_chain_spec() -> DevnetChainSpec {
+pub fn development_config() -> ChainSpec {
 	let mut properties = serde_json::map::Map::new();
-	properties.insert("tokenSymbol".into(), "MBTD".into());
+	properties.insert("tokenSymbol".into(), "MBTL".into());
 	properties.insert("tokenDecimals".into(), 18.into());
-	DevnetChainSpec::from_genesis(
-		"Devnet",
-		"devnet",
+	ChainSpec::from_genesis(
+		"Development",
+		"dev",
 		ChainType::Development,
 		move || {
 			make_genesis(

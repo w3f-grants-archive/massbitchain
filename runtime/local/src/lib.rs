@@ -63,8 +63,8 @@ pub fn wasm_binary_unwrap() -> &'static [u8] {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("massbit-devnet"),
-	impl_name: create_runtime_str!("massbit-devnet"),
+	spec_name: create_runtime_str!("massbit-local"),
+	impl_name: create_runtime_str!("massbit-local"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 1,
@@ -82,8 +82,8 @@ impl_opaque_keys! {
 }
 
 /// Constant values used within the runtime.
-pub const MILLIMBTD: Balance = 1_000_000_000_000_000;
-pub const MBTD: Balance = 1_000 * MILLIMBTD;
+pub const MILLIMBTL: Balance = 1_000_000_000_000_000;
+pub const MBTL: Balance = 1_000 * MILLIMBTL;
 
 /// This determines the average expected block time that we are targeting.
 /// Blocks will be produced at a minimum duration defined by `SLOT_DURATION`.
@@ -369,7 +369,7 @@ impl pallet_block_reward::BeneficiaryPayout<NegativeImbalance> for BeneficiaryPa
 }
 
 parameter_types! {
-	pub const RewardAmount: Balance = 1_000 * MILLIMBTD;
+	pub const RewardAmount: Balance = 1_000 * MILLIMBTL;
 }
 
 impl pallet_block_reward::Config for Runtime {
@@ -381,10 +381,10 @@ impl pallet_block_reward::Config for Runtime {
 }
 
 parameter_types! {
-	pub const RegisterDeposit: Balance = 90 * MBTD;
+	pub const RegisterDeposit: Balance = 90 * MBTL;
 	pub const ProviderRewardsPercentage: Perbill = Perbill::from_percent(80);
 	pub const MaxNumberOfStakersPerProvider: u32 = 10;
-	pub const MinimumStakingAmount: Balance = 10 * MBTD;
+	pub const MinimumStakingAmount: Balance = 10 * MBTL;
 	pub const MaxUnlockingChunks: u32 = 2;
 	pub const UnbondingPeriod: u32 = 2;
 	pub const MaxEraStakeValues: u32 = 5;

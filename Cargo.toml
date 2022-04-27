@@ -5,7 +5,7 @@ members = [
 	"pallets/dapi",
 	"pallets/dapi-staking",
 	"pallets/validator-set",
-	"runtime/devnet",
+	"runtime/local",
 	"runtime/testnet",
 ]
 [profile.release]

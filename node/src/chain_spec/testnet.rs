@@ -43,7 +43,7 @@ pub fn get_chain_spec() -> TestnetChainSpec {
 		move || {
 			make_genesis(
 				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice")],
+				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts

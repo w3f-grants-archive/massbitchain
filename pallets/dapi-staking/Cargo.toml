@@ -6,6 +6,7 @@ version = "0.1.0"
 
 [dependencies]
 codec = { package = "parity-scale-codec", version = "2.2.0", default-features = false, features = [ "derive" ] }
+frame-benchmarking = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17", optional = true, default-features = false }
 frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 num-traits = { version = "0.2", default-features = false }
@@ -22,8 +23,6 @@ sp-staking = { git = "https://github.com/paritytech/substrate", branch = "polkad
 sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 
 pallet-dapi = { path = "../dapi", default-features = false }
-
-frame-benchmarking = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17", optional = true, default-features = false }
 
 [features]
 default = [ "std" ]
