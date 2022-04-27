@@ -1,12 +1,11 @@
-#[cfg(feature = "frame-benchmarking")]
-use crate::primitives::Block;
 use crate::{
 	chain_spec,
 	cli::{Cli, Subcommand},
 };
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
+use sc_service::PartialComponents;
 
-use super::service::{self, devnet, testnet};
+use super::service::{self, dev, testnet};
 
 trait IdentifyChain {
 	fn is_dev(&self) -> bool;
@@ -17,7 +16,6 @@ impl IdentifyChain for dyn sc_service::ChainSpec {
 	fn is_dev(&self) -> bool {
 		self.id().starts_with("dev")
 	}
-
 	fn is_testnet(&self) -> bool {
 		self.id().starts_with("testnet")
 	}
@@ -27,7 +25,6 @@ impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
 	fn is_dev(&self) -> bool {
 		<dyn sc_service::ChainSpec>::is_dev(self)
 	}
-
 	fn is_testnet(&self) -> bool {
 		<dyn sc_service::ChainSpec>::is_testnet(self)
 	}
@@ -35,11 +32,13 @@ impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
 	Ok(match id {
-		"dev" => Box::new(chain_spec::devnet::get_chain_spec()),
-		"testnet" => Box::new(chain_spec::testnet::get_chain_spec()),
-		path => Box::new(chain_spec::devnet::DevnetChainSpec::from_json_file(
-			std::path::PathBuf::from(path),
+		"dev" => Box::new(chain_spec::local::development_config()),
+		"testnet-dev" => Box::new(chain_spec::testnet::get_chain_spec()),
+		"testnet" => Box::new(chain_spec::TestnetChainSpec::from_json_bytes(
+			&include_bytes!("../res/testnet.raw.json")[..],
 		)?),
+		path =>
+			Box::new(chain_spec::TestnetChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 	})
 }
 
@@ -73,10 +72,10 @@ impl SubstrateCli for Cli {
 	}
 
 	fn native_runtime_version(chain_spec: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
-		if chain_spec.is_testnet() {
-			&devnet_runtime::VERSION
+		if chain_spec.is_dev() {
+			&local_runtime::VERSION
 		} else {
-			&devnet_runtime::VERSION
+			&testnet_runtime::VERSION
 		}
 	}
 }
@@ -85,24 +84,39 @@ impl SubstrateCli for Cli {
 pub fn run() -> sc_cli::Result<()> {
 	let cli = Cli::from_args();
 	match &cli.subcommand {
-		Some(Subcommand::Key(cmd)) => cmd.run(&cli),
 		Some(Subcommand::BuildSpec(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| cmd.run(config.chain_spec, config.network))
 		},
-		Some(Subcommand::PurgeChain(cmd)) => {
+		Some(Subcommand::CheckBlock(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
-			runner.sync_run(|config| cmd.run(config.database))
+			if runner.config().chain_spec.is_testnet() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, import_queue, .. } =
+						service::new_partial::<testnet::RuntimeApi, testnet::Executor>(&config)?;
+					Ok((cmd.run(client, import_queue), task_manager))
+				})
+			} else {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, import_queue, .. } =
+						service::new_partial::<dev::RuntimeApi, dev::Executor>(&config)?;
+					Ok((cmd.run(client, import_queue), task_manager))
+				})
+			}
 		},
+		Some(Subcommand::Key(cmd)) => cmd.run(&cli),
+		Some(Subcommand::Sign(cmd)) => cmd.run(),
+		Some(Subcommand::Verify(cmd)) => cmd.run(),
+		Some(Subcommand::Vanity(cmd)) => cmd.run(),
 		#[cfg(feature = "frame-benchmarking")]
 		Some(Subcommand::Benchmark(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			let chain_spec = &runner.config().chain_spec;
-
 			if chain_spec.is_testnet() {
-				runner.sync_run(|config| cmd.run::<Block, testnet::Executor>(config))
+				runner
+					.sync_run(|config| cmd.run::<testnet_runtime::Block, testnet::Executor>(config))
 			} else {
-				runner.sync_run(|config| cmd.run::<Block, devnet::Executor>(config))
+				runner.sync_run(|config| cmd.run::<local_runtime::Block, dev::Executor>(config))
 			}
 		},
 		None => {
@@ -111,7 +125,7 @@ pub fn run() -> sc_cli::Result<()> {
 				if config.chain_spec.is_testnet() {
 					service::start_testnet_node(config).map_err(sc_cli::Error::Service)
 				} else {
-					service::start_devnet_node(config).map_err(sc_cli::Error::Service)
+					service::start_dev_node(config).map_err(sc_cli::Error::Service)
 				}
 			})
 		},

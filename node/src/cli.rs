@@ -1,4 +1,4 @@
-use sc_cli::RunCmd;
+use sc_cli::{KeySubcommand, RunCmd, SignCmd, VanityCmd, VerifyCmd};
 
 #[derive(Debug, clap::Parser)]
 pub struct Cli {
@@ -13,13 +13,22 @@ pub struct Cli {
 pub enum Subcommand {
 	/// Key management cli utilities
 	#[clap(subcommand)]
-	Key(sc_cli::KeySubcommand),
+	Key(KeySubcommand),
+
+	/// Verify a signature for a message, provided on STDIN, with a given (public or secret) key.
+	Verify(VerifyCmd),
+
+	/// Generate a seed that provides a vanity address.
+	Vanity(VanityCmd),
+
+	/// Sign a message, with a given (secret) key.
+	Sign(SignCmd),
 
 	/// Build a chain specification.
 	BuildSpec(sc_cli::BuildSpecCmd),
 
-	/// Remove the whole chain.
-	PurgeChain(sc_cli::PurgeChainCmd),
+	/// Validate blocks.
+	CheckBlock(sc_cli::CheckBlockCmd),
 
 	/// The custom benchmark subcommand benchmarking runtime pallets.
 	#[cfg(feature = "runtime-benchmarks")]

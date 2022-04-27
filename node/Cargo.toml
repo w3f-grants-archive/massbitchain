@@ -14,28 +14,18 @@ path = "bin/main.rs"
 crate-type = [ "cdylib", "rlib" ]
 
 [dependencies]
-# third-party dependencies
 clap = { version = "3.0", features = [ "derive" ] }
-serde_json = "1.0"
-
-# primitives
-sc-consensus = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-api = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-block-builder = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-blockchain = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-consensus = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-consensus-aura = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-finality-grandpa = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-offchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
-sp-runtime = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
-sp-timestamp = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-sp-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
-
-# client dependencies
+frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", optional = true }
+frame-benchmarking-cli = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", optional = true }
+frame-rpc-system = { package = "substrate-frame-rpc-system", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
+jsonrpc-core = "18.0.0"
+pallet-im-online = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+pallet-transaction-payment-rpc = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+polkadot-cli = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.17", optional = true }
 sc-basic-authorship = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
 sc-cli = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17", features = [ "wasmtime" ] }
 sc-client-api = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sc-consensus = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
 sc-consensus-aura = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
 sc-executor = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17", features = [ "wasmtime" ] }
 sc-finality-grandpa = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
@@ -46,38 +36,31 @@ sc-service = { git = "https://github.com/paritytech/substrate.git", branch = "po
 sc-telemetry = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
 sc-transaction-pool = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
 sc-transaction-pool-api = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+serde_json = "1.0"
+sp-api = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-block-builder = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-blockchain = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-consensus = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-consensus-aura = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
 sp-core = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-finality-grandpa = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-offchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
+sp-runtime = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
+sp-timestamp = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
+sp-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
 
-# RPC related dependencies
-jsonrpc-core = "18.0.0"
-
-# Massbit-specific dependencies
-devnet-runtime = { path = "../runtime/devnet", version = "0.1.0" }
+local-runtime = { path = "../runtime/local", version = "0.1.0" }
 testnet-runtime = { path = "../runtime/testnet", version = "0.1.0" }
-
-# frame dependencies
-frame-rpc-system = { package = "substrate-frame-rpc-system", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
-pallet-im-online = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-pallet-transaction-payment-rpc = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.17" }
-
-# polkadot dependencies
-polkadot-cli = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.17", optional = true }
-
-# benchmark dependencies
-frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", optional = true }
-frame-benchmarking-cli = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", optional = true }
 
 [build-dependencies]
 build-script-utils = { package = "substrate-build-script-utils", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
-polkadot-cli = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.17", optional = true }
 
 [features]
-default = [
-	"polkadot-cli",
-]
+default = []
 runtime-benchmarks = [
-	"devnet-runtime/runtime-benchmarks",
 	"frame-benchmarking",
 	"frame-benchmarking-cli",
+	"local-runtime/runtime-benchmarks",
 	"polkadot-cli/runtime-benchmarks",
 ]
