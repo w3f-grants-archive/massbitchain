@@ -39,7 +39,6 @@ pub use frame_support::{
 };
 use frame_system::EnsureRoot;
 pub use pallet_balances::Call as BalancesCall;
-use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
 #[cfg(any(feature = "std", test))]
@@ -77,7 +76,6 @@ impl_opaque_keys! {
 	pub struct SessionKeys {
 		pub aura: Aura,
 		pub grandpa: Grandpa,
-		pub im_online: ImOnline,
 	}
 }
 
@@ -255,13 +253,25 @@ impl pallet_utility::Config for Runtime {
 }
 
 parameter_types! {
-	pub const MinAuthorities: u32 = 2;
+	pub const PotId: PalletId = PalletId(*b"PotStake");
+	pub const MaxCandidates: u32 = 200;
+	pub const MinCandidates: u32 = 5;
+	pub const MaxInvulnerables: u32 = 20;
+	pub const SlashRatio: Perbill = Perbill::from_percent(1);
 }
 
 impl pallet_validator_set::Config for Runtime {
-	type AddRemoveOrigin = EnsureRoot<AccountId>;
-	type MinAuthorities = MinAuthorities;
 	type Event = Event;
+	type Currency = Balances;
+	type UpdateOrigin = EnsureRoot<AccountId>;
+	type PotId = PotId;
+	type MaxCandidates = MaxCandidates;
+	type MinCandidates = MinCandidates;
+	type MaxInvulnerables = MaxInvulnerables;
+	type KickThreshold = ();
+	type ValidatorRegistration = Session;
+	type SlashRatio = SlashRatio;
+	type WeightInfo = pallet_validator_set::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -272,82 +282,13 @@ parameter_types! {
 impl pallet_session::Config for Runtime {
 	type Event = Event;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
-	type ValidatorIdOf = pallet_validator_set::ValidatorOf<Self>;
+	type ValidatorIdOf = pallet_validator_set::IdentityValidator;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type SessionManager = ValidatorSet;
 	type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = SessionKeys;
 	type WeightInfo = ();
-}
-
-parameter_types! {
-	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
-	pub const MaxKeys: u32 = 10_000;
-	pub const MaxPeerInHeartbeats: u32 = 10_000;
-	pub const MaxPeerDataEncodingSize: u32 = 1_000;
-}
-
-impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
-where
-	Call: From<LocalCall>,
-{
-	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
-		call: Call,
-		public: <Signature as Verify>::Signer,
-		account: AccountId,
-		nonce: Index,
-	) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
-		let tip = 0;
-		let period =
-			BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
-		let current_block = System::block_number().saturating_sub(1) as u64;
-		let era = generic::Era::mortal(period, current_block);
-		let extra = (
-			frame_system::CheckSpecVersion::<Runtime>::new(),
-			frame_system::CheckTxVersion::<Runtime>::new(),
-			frame_system::CheckGenesis::<Runtime>::new(),
-			frame_system::CheckEra::<Runtime>::from(era),
-			frame_system::CheckNonce::<Runtime>::from(nonce),
-			frame_system::CheckWeight::<Runtime>::new(),
-			pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
-		);
-		let raw_payload = SignedPayload::new(call, extra)
-			.map_err(|e| {
-				log::warn!("Unable to create signed payload: {:?}", e);
-			})
-			.ok()?;
-		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
-		let address = account;
-		let (call, extra, _) = raw_payload.deconstruct();
-		Some((call, (sp_runtime::MultiAddress::Id(address), signature.into(), extra)))
-	}
-}
-
-impl frame_system::offchain::SigningTypes for Runtime {
-	type Public = <Signature as Verify>::Signer;
-	type Signature = Signature;
-}
-
-impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
-where
-	Call: From<C>,
-{
-	type Extrinsic = UncheckedExtrinsic;
-	type OverarchingCall = Call;
-}
-
-impl pallet_im_online::Config for Runtime {
-	type AuthorityId = ImOnlineId;
-	type MaxKeys = MaxKeys;
-	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
-	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
-	type Event = Event;
-	type ValidatorSet = ValidatorSet;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type ReportUnresponsiveness = ValidatorSet;
-	type UnsignedPriority = ImOnlineUnsignedPriority;
-	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -388,17 +329,17 @@ parameter_types! {
 }
 
 impl pallet_dapi_staking::Config for Runtime {
+	type Event = Event;
 	type Currency = Balances;
 	type ProviderId = MassbitId;
 	type ProviderRewardsPercentage = OperatorRewardPercentage;
 	type MinProviderStake = RegisterDeposit;
 	type MaxDelegatorsPerProvider = MaxNumberOfStakersPerProvider;
 	type MinDelegatorStake = MinimumStakingAmount;
-	type PalletId = DapiStakingPalletId;
-	type MaxUnlockingChunks = MaxUnlockingChunks;
-	type UnbondingPeriod = UnbondingPeriod;
 	type MaxEraStakeValues = MaxEraStakeValues;
-	type Event = Event;
+	type UnbondingPeriod = UnbondingPeriod;
+	type MaxUnlockingChunks = MaxUnlockingChunks;
+	type PalletId = DapiStakingPalletId;
 	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<Runtime>;
 }
 
@@ -443,7 +384,6 @@ construct_runtime!(
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
 		ValidatorSet: pallet_validator_set::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
-		ImOnline: pallet_im_online,
 		Aura: pallet_aura::{Pallet, Config<T>},
 		Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},

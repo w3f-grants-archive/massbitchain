@@ -2,10 +2,9 @@
 
 use local_runtime::{
 	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
-	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, ImOnlineConfig, SessionConfig,
-	SessionKeys, Signature, SudoConfig, SystemConfig, ValidatorSetConfig,
+	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, SessionConfig, SessionKeys,
+	Signature, SudoConfig, SystemConfig, ValidatorSetConfig, MBTL,
 };
-use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
@@ -19,16 +18,15 @@ use super::get_from_seed;
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
-fn session_keys(aura: AuraId, grandpa: GrandpaId, im_online: ImOnlineId) -> SessionKeys {
-	SessionKeys { aura, grandpa, im_online }
+fn session_keys(aura: AuraId, grandpa: GrandpaId) -> SessionKeys {
+	SessionKeys { aura, grandpa }
 }
 
-pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId, ImOnlineId) {
+pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId) {
 	(
 		get_account_id_from_seed::<sr25519::Public>(s),
 		get_from_seed::<AuraId>(s),
 		get_from_seed::<GrandpaId>(s),
-		get_from_seed::<ImOnlineId>(s),
 	)
 }
 
@@ -43,7 +41,7 @@ pub fn development_config() -> ChainSpec {
 		move || {
 			make_genesis(
 				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
+				vec![authority_keys_from_seed("Alice")],
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
@@ -71,7 +69,7 @@ pub fn development_config() -> ChainSpec {
 }
 
 fn make_genesis(
-	initial_authorities: Vec<(AccountId, AuraId, GrandpaId, ImOnlineId)>,
+	initial_authorities: Vec<(AccountId, AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	initial_regulators: Vec<AccountId>,
@@ -93,19 +91,18 @@ fn make_genesis(
 			},
 		},
 		validator_set: ValidatorSetConfig {
-			initial_validators: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
+			desired_candidates: 200,
+			candidacy_bond: 1_000 * MBTL,
+			invulnerables: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
 		},
 		session: SessionConfig {
 			keys: initial_authorities
 				.iter()
-				.map(|x| {
-					(x.0.clone(), x.0.clone(), session_keys(x.1.clone(), x.2.clone(), x.3.clone()))
-				})
+				.map(|x| (x.0.clone(), x.0.clone(), session_keys(x.1.clone(), x.2.clone())))
 				.collect::<Vec<_>>(),
 		},
 		aura: AuraConfig { authorities: vec![] },
 		grandpa: GrandpaConfig { authorities: vec![] },
-		im_online: ImOnlineConfig { keys: vec![] },
 		sudo: SudoConfig { key: Some(root_key) },
 		dapi: DapiConfig { regulators: initial_regulators.iter().map(|x| x.clone()).collect() },
 	}
