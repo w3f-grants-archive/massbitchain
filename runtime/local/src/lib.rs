@@ -7,44 +7,40 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
+use frame_support::{
+	construct_runtime, log, parameter_types,
+	traits::{Currency, Imbalance, KeyOwnerProofSystem, OnUnbalanced, StorageInfo},
+	weights::{
+		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
+		IdentityFee, Weight,
+	},
+	PalletId, RuntimeDebug,
+};
+use frame_system::EnsureRoot;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
+use pallet_transaction_payment::CurrencyAdapter;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
-		AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, OpaqueKeys,
-		Verify,
+		AccountIdConversion, AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount,
+		NumberFor, OpaqueKeys, Verify,
 	},
 	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult, MultiSignature,
+	ApplyExtrinsicResult, MultiSignature, Perbill, Permill,
 };
 use sp_std::prelude::*;
+
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
-use frame_support::traits::OnUnbalanced;
-pub use frame_support::{
-	construct_runtime, log, parameter_types,
-	traits::{Currency, KeyOwnerProofSystem, StorageInfo},
-	weights::{
-		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
-		IdentityFee, Weight,
-	},
-	PalletId, RuntimeDebug, StorageValue,
-};
-use frame_system::EnsureRoot;
-pub use pallet_balances::Call as BalancesCall;
-use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
-pub use pallet_timestamp::Call as TimestampCall;
-use pallet_transaction_payment::CurrencyAdapter;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
-pub use sp_runtime::{Perbill, Permill};
 
 pub use pallet_block_reward;
 pub use pallet_dapi;
@@ -77,7 +73,6 @@ impl_opaque_keys! {
 	pub struct SessionKeys {
 		pub aura: Aura,
 		pub grandpa: Grandpa,
-		pub im_online: ImOnline,
 	}
 }
 
@@ -91,7 +86,7 @@ pub const MBTL: Balance = 1_000 * MILLIMBTL;
 /// up by `pallet_aura` to implement `fn slot_duration()`.
 ///
 /// Change this to adjust the block time.
-pub const MILLISECS_PER_BLOCK: u64 = 2000;
+pub const MILLISECS_PER_BLOCK: u64 = 12000;
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
 // Time is measured by number of blocks.
@@ -173,36 +168,6 @@ impl frame_system::Config for Runtime {
 }
 
 parameter_types! {
-	pub const MaxAuthorities: u32 = 32;
-}
-
-impl pallet_aura::Config for Runtime {
-	type AuthorityId = AuraId;
-	type MaxAuthorities = MaxAuthorities;
-	type DisabledValidators = ();
-}
-
-impl pallet_grandpa::Config for Runtime {
-	type Event = Event;
-	type Call = Call;
-
-	type KeyOwnerProof =
-		<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
-
-	type KeyOwnerIdentification = <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(
-		KeyTypeId,
-		GrandpaId,
-	)>>::IdentificationTuple;
-
-	type KeyOwnerProofSystem = ();
-
-	type HandleEquivocation = ();
-
-	type WeightInfo = ();
-	type MaxAuthorities = MaxAuthorities;
-}
-
-parameter_types! {
 	pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
 }
 
@@ -211,6 +176,30 @@ impl pallet_timestamp::Config for Runtime {
 	type Moment = u64;
 	type OnTimestampSet = (Aura, BlockReward);
 	type MinimumPeriod = MinimumPeriod;
+	type WeightInfo = ();
+}
+
+parameter_types! {
+	pub const BasicDeposit: Balance = 10 * MBTL;       // 258 bytes on-chain
+	pub const FieldDeposit: Balance = 25 * MILLIMBTL;  // 66 bytes on-chain
+	pub const SubAccountDeposit: Balance = 2 * MBTL;   // 53 bytes on-chain
+	pub const MaxSubAccounts: u32 = 100;
+	pub const MaxAdditionalFields: u32 = 100;
+	pub const MaxRegistrars: u32 = 20;
+}
+
+impl pallet_identity::Config for Runtime {
+	type Event = Event;
+	type Currency = Balances;
+	type BasicDeposit = BasicDeposit;
+	type FieldDeposit = FieldDeposit;
+	type SubAccountDeposit = SubAccountDeposit;
+	type MaxSubAccounts = MaxSubAccounts;
+	type MaxAdditionalFields = MaxAdditionalFields;
+	type MaxRegistrars = MaxRegistrars;
+	type Slashed = ();
+	type ForceOrigin = frame_system::EnsureRoot<<Self as frame_system::Config>::AccountId>;
+	type RegistrarOrigin = frame_system::EnsureRoot<<Self as frame_system::Config>::AccountId>;
 	type WeightInfo = ();
 }
 
@@ -236,8 +225,20 @@ parameter_types! {
 	pub OperationalFeeMultiplier: u8 = 5;
 }
 
+pub struct DealWithFees;
+impl OnUnbalanced<NegativeImbalance> for DealWithFees {
+	fn on_unbalanceds<B>(mut fees_then_tips: impl Iterator<Item = NegativeImbalance>) {
+		if let Some(mut fees) = fees_then_tips.next() {
+			if let Some(tips) = fees_then_tips.next() {
+				tips.merge_into(&mut fees);
+			}
+			<ToValidatorPot as OnUnbalanced<_>>::on_unbalanced(fees);
+		}
+	}
+}
+
 impl pallet_transaction_payment::Config for Runtime {
-	type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
+	type OnChargeTransaction = CurrencyAdapter<Balances, DealWithFees>;
 	type TransactionByteFee = TransactionByteFee;
 	type OperationalFeeMultiplier = OperationalFeeMultiplier;
 	type WeightToFee = IdentityFee<Balance>;
@@ -257,100 +258,91 @@ impl pallet_utility::Config for Runtime {
 }
 
 parameter_types! {
-	pub const MinAuthorities: u32 = 1;
+	pub const MaxAuthorities: u32 = 250;
 }
 
-impl pallet_validator_set::Config for Runtime {
-	type AddRemoveOrigin = EnsureRoot<AccountId>;
-	type MinAuthorities = MinAuthorities;
-	type Event = Event;
+impl pallet_aura::Config for Runtime {
+	type AuthorityId = AuraId;
+	type MaxAuthorities = MaxAuthorities;
+	type DisabledValidators = ();
 }
 
 parameter_types! {
-	pub const Period: u32 = 2 * MINUTES;
-	pub const Offset: u32 = 0;
+	pub const UncleGenerations: BlockNumber = 5;
+}
+
+impl pallet_authorship::Config for Runtime {
+	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
+	type UncleGenerations = UncleGenerations;
+	type FilterUncle = ();
+	type EventHandler = (ValidatorSet,);
+}
+
+impl pallet_grandpa::Config for Runtime {
+	type Event = Event;
+	type Call = Call;
+
+	type KeyOwnerProof =
+		<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
+
+	type KeyOwnerIdentification = <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(
+		KeyTypeId,
+		GrandpaId,
+	)>>::IdentificationTuple;
+
+	type KeyOwnerProofSystem = ();
+
+	type HandleEquivocation = ();
+
+	type WeightInfo = ();
+	type MaxAuthorities = MaxAuthorities;
+}
+
+parameter_types! {
+	pub const SessionPeriod: BlockNumber = 1 * MINUTES;
+	pub const SessionOffset: BlockNumber = 0;
 }
 
 impl pallet_session::Config for Runtime {
 	type Event = Event;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
-	type ValidatorIdOf = pallet_validator_set::ValidatorOf<Self>;
-	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type ValidatorIdOf = pallet_validator_set::IdentityValidator;
+	type ShouldEndSession = pallet_session::PeriodicSessions<SessionPeriod, SessionOffset>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<SessionPeriod, SessionOffset>;
 	type SessionManager = ValidatorSet;
 	type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = SessionKeys;
-	type WeightInfo = ();
+	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
-	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
-	pub const MaxKeys: u32 = 10_000;
-	pub const MaxPeerInHeartbeats: u32 = 10_000;
-	pub const MaxPeerDataEncodingSize: u32 = 1_000;
+	pub const PotId: PalletId = PalletId(*b"PotStake");
+	pub const MaxCandidates: u32 = 200;
+	pub const MinCandidates: u32 = 5;
+	pub const MaxInvulnerables: u32 = 20;
+	pub const SlashRatio: Perbill = Perbill::from_percent(1);
 }
 
-impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
-where
-	Call: From<LocalCall>,
-{
-	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
-		call: Call,
-		public: <Signature as Verify>::Signer,
-		account: AccountId,
-		nonce: Index,
-	) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
-		let tip = 0;
-		let period =
-			BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
-		let current_block = System::block_number().saturating_sub(1) as u64;
-		let era = generic::Era::mortal(period, current_block);
-		let extra = (
-			frame_system::CheckSpecVersion::<Runtime>::new(),
-			frame_system::CheckTxVersion::<Runtime>::new(),
-			frame_system::CheckGenesis::<Runtime>::new(),
-			frame_system::CheckEra::<Runtime>::from(era),
-			frame_system::CheckNonce::<Runtime>::from(nonce),
-			frame_system::CheckWeight::<Runtime>::new(),
-			pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
-			pallet_dapi::PreValidateRegulatorCalls::<Runtime>::new(),
-		);
-		let raw_payload = SignedPayload::new(call, extra)
-			.map_err(|e| {
-				log::warn!("Unable to create signed payload: {:?}", e);
-			})
-			.ok()?;
-		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
-		let address = account;
-		let (call, extra, _) = raw_payload.deconstruct();
-		Some((call, (sp_runtime::MultiAddress::Id(address), signature.into(), extra)))
-	}
-}
-
-impl frame_system::offchain::SigningTypes for Runtime {
-	type Public = <Signature as Verify>::Signer;
-	type Signature = Signature;
-}
-
-impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
-where
-	Call: From<C>,
-{
-	type Extrinsic = UncheckedExtrinsic;
-	type OverarchingCall = Call;
-}
-
-impl pallet_im_online::Config for Runtime {
-	type AuthorityId = ImOnlineId;
-	type MaxKeys = MaxKeys;
-	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
-	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
+impl pallet_validator_set::Config for Runtime {
 	type Event = Event;
-	type ValidatorSet = ValidatorSet;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type ReportUnresponsiveness = ValidatorSet;
-	type UnsignedPriority = ImOnlineUnsignedPriority;
-	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
+	type Currency = Balances;
+	type UpdateOrigin = EnsureRoot<AccountId>;
+	type PotId = PotId;
+	type MaxCandidates = MaxCandidates;
+	type MinCandidates = MinCandidates;
+	type MaxInvulnerables = MaxInvulnerables;
+	type KickThreshold = SessionPeriod;
+	type ValidatorRegistration = Session;
+	type SlashRatio = SlashRatio;
+	type WeightInfo = pallet_validator_set::weights::SubstrateWeight<Runtime>;
+}
+
+pub struct ToValidatorPot;
+impl OnUnbalanced<NegativeImbalance> for ToValidatorPot {
+	fn on_nonzero_unbalanced(amount: NegativeImbalance) {
+		let pot = PotId::get().into_account();
+		Balances::resolve_creating(&pot, amount);
+	}
 }
 
 parameter_types! {
@@ -361,7 +353,9 @@ type NegativeImbalance = <Balances as Currency<AccountId>>::NegativeImbalance;
 
 pub struct BeneficiaryPayout();
 impl pallet_block_reward::BeneficiaryPayout<NegativeImbalance> for BeneficiaryPayout {
-	fn validators(_: NegativeImbalance) {}
+	fn validators(reward: NegativeImbalance) {
+		ToValidatorPot::on_unbalanced(reward);
+	}
 
 	fn providers(reward: NegativeImbalance) {
 		DapiStaking::handle_imbalance(reward)
@@ -391,16 +385,16 @@ parameter_types! {
 }
 
 impl pallet_dapi_staking::Config for Runtime {
+	type Event = Event;
 	type Currency = Balances;
 	type ProviderId = MassbitId;
 	type ProviderRewardsPercentage = ProviderRewardsPercentage;
 	type MinProviderStake = RegisterDeposit;
 	type MaxDelegatorsPerProvider = MaxNumberOfStakersPerProvider;
 	type MinDelegatorStake = MinimumStakingAmount;
-	type MaxUnlockingChunks = MaxUnlockingChunks;
-	type UnbondingPeriod = UnbondingPeriod;
 	type MaxEraStakeValues = MaxEraStakeValues;
-	type Event = Event;
+	type UnbondingPeriod = UnbondingPeriod;
+	type MaxUnlockingChunks = MaxUnlockingChunks;
 	type PalletId = DapiStakingPalletId;
 	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<Runtime>;
 }
@@ -443,10 +437,11 @@ construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+		Authorship: pallet_authorship::{Pallet, Call, Storage, Inherent},
 		ValidatorSet: pallet_validator_set::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
-		ImOnline: pallet_im_online,
 		Aura: pallet_aura::{Pallet, Config<T>},
 		Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
@@ -650,6 +645,7 @@ impl_runtime_apis! {
 			list_benchmark!(list, extra, pallet_block_reward, BlockReward);
 			list_benchmark!(list, extra, pallet_dapi, Dapi);
 			list_benchmark!(list, extra, pallet_dapi_staking, DapiStaking);
+			list_benchmark!(list, extra, pallet_validator_set, ValidatorSet);
 
 			let storage_info = AllPalletsWithSystem::storage_info();
 
@@ -682,6 +678,7 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, pallet_block_reward, BlockReward);
 			add_benchmark!(params, batches, pallet_dapi, Dapi);
 			add_benchmark!(params, batches, pallet_dapi_staking, DapiStaking);
+			add_benchmark!(params, batches, pallet_validator_set, ValidatorSet);
 
 			if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
 			Ok(batches)
