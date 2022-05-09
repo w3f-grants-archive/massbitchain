@@ -9,10 +9,10 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use codec::{Decode, Encode};
 use frame_support::{
 	construct_runtime, log, parameter_types,
-	traits::{Currency, Imbalance, KeyOwnerProofSystem, OnUnbalanced, StorageInfo},
+	traits::{Currency, Imbalance, KeyOwnerProofSystem, OnUnbalanced},
 	weights::{
-		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
-		IdentityFee, Weight,
+		constants::{RocksDbWeight, WEIGHT_PER_SECOND},
+		IdentityFee,
 	},
 	PalletId, RuntimeDebug,
 };
@@ -30,8 +30,8 @@ use sp_runtime::{
 		AccountIdConversion, AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount,
 		NumberFor, OpaqueKeys, Verify,
 	},
-	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult, MultiSignature, Perbill, Permill,
+	transaction_validity::{TransactionSource, TransactionValidity},
+	ApplyExtrinsicResult, MultiSignature, Perbill,
 };
 use sp_std::prelude::*;
 
@@ -257,6 +257,56 @@ impl pallet_utility::Config for Runtime {
 	type WeightInfo = ();
 }
 
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
+where
+	Call: From<LocalCall>,
+{
+	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+		call: Call,
+		public: <Signature as Verify>::Signer,
+		account: AccountId,
+		nonce: Index,
+	) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
+		let tip = 0;
+		let period =
+			BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
+		let current_block = System::block_number().saturating_sub(1) as u64;
+		let era = generic::Era::mortal(period, current_block);
+		let extra = (
+			frame_system::CheckSpecVersion::<Runtime>::new(),
+			frame_system::CheckTxVersion::<Runtime>::new(),
+			frame_system::CheckGenesis::<Runtime>::new(),
+			frame_system::CheckEra::<Runtime>::from(era),
+			frame_system::CheckNonce::<Runtime>::from(nonce),
+			frame_system::CheckWeight::<Runtime>::new(),
+			pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
+			pallet_dapi::PreValidateRegulatorCalls::<Runtime>::new(),
+		);
+		let raw_payload = SignedPayload::new(call, extra)
+			.map_err(|e| {
+				log::warn!("Unable to create signed payload: {:?}", e);
+			})
+			.ok()?;
+		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
+		let address = account;
+		let (call, extra, _) = raw_payload.deconstruct();
+		Some((call, (sp_runtime::MultiAddress::Id(address), signature.into(), extra)))
+	}
+}
+
+impl frame_system::offchain::SigningTypes for Runtime {
+	type Public = <Signature as Verify>::Signer;
+	type Signature = Signature;
+}
+
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+where
+	Call: From<C>,
+{
+	type Extrinsic = UncheckedExtrinsic;
+	type OverarchingCall = Call;
+}
+
 parameter_types! {
 	pub const MaxAuthorities: u32 = 250;
 }
@@ -281,19 +331,14 @@ impl pallet_authorship::Config for Runtime {
 impl pallet_grandpa::Config for Runtime {
 	type Event = Event;
 	type Call = Call;
-
 	type KeyOwnerProof =
 		<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
-
 	type KeyOwnerIdentification = <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(
 		KeyTypeId,
 		GrandpaId,
 	)>>::IdentificationTuple;
-
 	type KeyOwnerProofSystem = ();
-
 	type HandleEquivocation = ();
-
 	type WeightInfo = ();
 	type MaxAuthorities = MaxAuthorities;
 }
@@ -316,7 +361,7 @@ impl pallet_session::Config for Runtime {
 }
 
 parameter_types! {
-	pub const PotId: PalletId = PalletId(*b"PotStake");
+	pub const ValidatorPot: PalletId = PalletId(*b"valdtset");
 	pub const MaxCandidates: u32 = 200;
 	pub const MinCandidates: u32 = 5;
 	pub const MaxInvulnerables: u32 = 20;
@@ -327,7 +372,7 @@ impl pallet_validator_set::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
 	type UpdateOrigin = EnsureRoot<AccountId>;
-	type PotId = PotId;
+	type PotId = ValidatorPot;
 	type MaxCandidates = MaxCandidates;
 	type MinCandidates = MinCandidates;
 	type MaxInvulnerables = MaxInvulnerables;
@@ -340,13 +385,9 @@ impl pallet_validator_set::Config for Runtime {
 pub struct ToValidatorPot;
 impl OnUnbalanced<NegativeImbalance> for ToValidatorPot {
 	fn on_nonzero_unbalanced(amount: NegativeImbalance) {
-		let pot = PotId::get().into_account();
+		let pot = ValidatorPot::get().into_account();
 		Balances::resolve_creating(&pot, amount);
 	}
-}
-
-parameter_types! {
-	pub const DapiStakingPalletId: PalletId = PalletId(*b"py/dapst");
 }
 
 type NegativeImbalance = <Balances as Currency<AccountId>>::NegativeImbalance;
@@ -375,6 +416,7 @@ impl pallet_block_reward::Config for Runtime {
 }
 
 parameter_types! {
+	pub const DapiStakingPot: PalletId = PalletId(*b"dapistak");
 	pub const RegisterDeposit: Balance = 90 * MBTL;
 	pub const ProviderRewardsPercentage: Perbill = Perbill::from_percent(80);
 	pub const MaxNumberOfStakersPerProvider: u32 = 10;
@@ -395,7 +437,7 @@ impl pallet_dapi_staking::Config for Runtime {
 	type MaxEraStakeValues = MaxEraStakeValues;
 	type UnbondingPeriod = UnbondingPeriod;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
-	type PalletId = DapiStakingPalletId;
+	type PotId = DapiStakingPot;
 	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<Runtime>;
 }
 
@@ -414,7 +456,7 @@ impl pallet_dapi::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
 	type DapiStaking = DapiStaking;
-	type UpdateRegulatorOrigin = EnsureRoot<AccountId>;
+	type UpdateOrigin = EnsureRoot<AccountId>;
 	type ChainIdMaxLength = MaxBytesInChainId;
 	type MassbitId = MassbitId;
 	type OnProjectPayment = OnProjectPayment;

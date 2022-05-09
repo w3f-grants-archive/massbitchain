@@ -129,7 +129,7 @@ impl pallet_dapi_staking::Config for TestRuntime {
 	type MaxEraStakeValues = MaxEraStakeValues;
 	type UnbondingPeriod = UnbondingPeriod;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
-	type PalletId = DapiStakingPalletId;
+	type PotId = DapiStakingPalletId;
 	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
 }
 

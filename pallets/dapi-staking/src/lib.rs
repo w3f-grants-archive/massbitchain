@@ -94,7 +94,7 @@ pub mod pallet {
 
 		/// dAPI staking pallet Id.
 		#[pallet::constant]
-		type PalletId: Get<PalletId>;
+		type PotId: Get<PalletId>;
 
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
@@ -699,7 +699,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Get AccountId assigned to the pallet.
 		fn account_id() -> T::AccountId {
-			T::PalletId::get().into_account()
+			T::PotId::get().into_account()
 		}
 
 		/// Update the unbonding information for an account.
