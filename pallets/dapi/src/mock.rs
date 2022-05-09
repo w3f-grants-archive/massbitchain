@@ -152,7 +152,7 @@ impl pallet_dapi::Config for TestRuntime {
 	type Event = Event;
 	type Currency = Balances;
 	type DapiStaking = DapiStaking;
-	type UpdateRegulatorOrigin = EnsureRoot<AccountId>;
+	type UpdateOrigin = EnsureRoot<AccountId>;
 	type ChainIdMaxLength = ConstU32<64>;
 	type MassbitId = MockProvider;
 	type OnProjectPayment = ();

@@ -10,7 +10,6 @@ use frame_support::{
 	},
 	PalletId,
 };
-use log;
 use scale_info::TypeInfo;
 use sp_runtime::{
 	traits::{AccountIdConversion, CheckedSub, Convert, Saturating, Zero},
@@ -170,9 +169,9 @@ pub mod pallet {
 				"genesis desired_candidates are more than T::MaxCandidates",
 			);
 
+			<Invulnerables<T>>::put(&self.invulnerables);
 			<DesiredCandidates<T>>::put(&self.desired_candidates);
 			<CandidacyBond<T>>::put(&self.candidacy_bond);
-			<Invulnerables<T>>::put(&self.invulnerables);
 		}
 	}
 
@@ -212,12 +211,6 @@ pub mod pallet {
 			new: Vec<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
 			T::UpdateOrigin::ensure_origin(origin)?;
-			if (new.len() as u32) > T::MaxInvulnerables::get() {
-				log::warn!(
-					"invulnerables > T::MaxInvulnerables; you might need to run benchmarks again"
-				);
-			}
-
 			for account_id in &new {
 				let validator_key = T::ValidatorIdOf::convert(account_id.clone())
 					.ok_or(Error::<T>::NoAssociatedValidatorId)?;
@@ -228,6 +221,7 @@ pub mod pallet {
 			}
 
 			<Invulnerables<T>>::put(&new);
+
 			Self::deposit_event(Event::NewInvulnerables(new));
 			Ok(().into())
 		}
@@ -242,10 +236,6 @@ pub mod pallet {
 			max: u32,
 		) -> DispatchResultWithPostInfo {
 			T::UpdateOrigin::ensure_origin(origin)?;
-			// we trust origin calls, this is just a for more accurate benchmarking
-			if max > T::MaxCandidates::get() {
-				log::warn!("max > T::MaxCandidates; you might need to run benchmarks again");
-			}
 			<DesiredCandidates<T>>::put(&max);
 			Self::deposit_event(Event::NewDesiredCandidates(max));
 			Ok(().into())
@@ -273,7 +263,7 @@ pub mod pallet {
 
 			let length = <Candidates<T>>::decode_len().unwrap_or_default();
 			ensure!((length as u32) < Self::desired_candidates(), Error::<T>::TooManyCandidates);
-			ensure!(!Self::invulnerables().contains(&who), Error::<T>::AlreadyInvulnerable);
+			ensure!(!<Invulnerables<T>>::get().contains(&who), Error::<T>::AlreadyInvulnerable);
 
 			let validator_key = T::ValidatorIdOf::convert(who.clone())
 				.ok_or(Error::<T>::NoAssociatedValidatorId)?;
@@ -282,7 +272,7 @@ pub mod pallet {
 				Error::<T>::ValidatorNotRegistered
 			);
 
-			let deposit = Self::candidacy_bond();
+			let deposit = <CandidacyBond<T>>::get();
 			let new_candidate = CandidateInfo { who: who.clone(), deposit };
 			let _ = <Candidates<T>>::try_mutate(|candidates| -> Result<usize, DispatchError> {
 				if candidates.into_iter().any(|candidate| candidate.who == who) {
@@ -355,6 +345,7 @@ pub mod pallet {
 					<LastAuthoredBlock<T>>::remove(who.clone());
 					Ok(candidates.len())
 				})?;
+
 			Self::deposit_event(Event::CandidateRemoved(who.clone()));
 			Ok(current_count)
 		}
@@ -386,7 +377,6 @@ pub mod pallet {
 					} else {
 						let outcome = Self::try_remove_candidate(&c.who, true);
 						if let Err(why) = outcome {
-							log::warn!("Failed to remove candidate {:?}", why);
 							debug_assert!(false, "failed to remove candidate {:?}", why);
 						}
 						None
@@ -423,13 +413,7 @@ impl<T: Config + pallet_authorship::Config>
 }
 
 impl<T: Config> pallet_session::SessionManager<T::AccountId> for Pallet<T> {
-	fn new_session(index: SessionIndex) -> Option<Vec<T::AccountId>> {
-		log::info!(
-			"assembling new validators for new session {} at #{:?}",
-			index,
-			<frame_system::Pallet<T>>::block_number(),
-		);
-
+	fn new_session(_index: SessionIndex) -> Option<Vec<T::AccountId>> {
 		let candidates = Self::candidates();
 		let candidates_len_before = candidates.len();
 		let active_candidates = Self::kick_stale_candidates(candidates);

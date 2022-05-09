@@ -1,4 +1,4 @@
-//! dAPI Management Pallet
+//! dAPI Pallet
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -39,7 +39,7 @@ pub mod pallet {
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::without_storage_info]
-	pub struct Pallet<T>(PhantomData<T>);
+	pub struct Pallet<T>(_);
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -53,12 +53,12 @@ pub mod pallet {
 		type DapiStaking: DapiStaking<Self::AccountId, Self::MassbitId, BalanceOf<Self>>;
 
 		/// The origin which can add/remove regulators.
-		type UpdateRegulatorOrigin: EnsureOrigin<Self::Origin>;
+		type UpdateOrigin: EnsureOrigin<Self::Origin>;
 
 		/// For constraining the maximum length of a Chain Id.
 		type ChainIdMaxLength: Get<u32>;
 
-		/// The Id type of Massbit provider or project.
+		/// The id type of Massbit provider or project.
 		type MassbitId: Parameter + Member + Default;
 
 		/// Handle project payment as imbalance.
@@ -489,9 +489,9 @@ where
 	) -> TransactionValidity {
 		if let Some(local_call) = call.is_sub_type() {
 			match local_call {
-				Call::submit_project_usage { .. } |
-				Call::register_provider { .. } |
-				Call::report_provider_offence { .. } => {
+				Call::submit_project_usage { .. }
+				| Call::register_provider { .. }
+				| Call::report_provider_offence { .. } => {
 					ensure!(<Regulators<T>>::get().contains(who), InvalidTransaction::BadSigner);
 				},
 				_ => {},
