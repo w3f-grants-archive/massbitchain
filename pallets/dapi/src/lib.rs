@@ -97,8 +97,9 @@ pub mod pallet {
 			project_id: T::MassbitId,
 			new_quota: u128,
 		},
-		ProjectReachedQuota {
+		ProjectUsageUpdated {
 			project_id: T::MassbitId,
+			usage: u128,
 		},
 		ProviderRegistered {
 			provider_id: T::MassbitId,
@@ -235,10 +236,9 @@ pub mod pallet {
 			ensure!(Self::regulators().contains(&regulator), Error::<T>::PermissionDenied);
 			let mut project = Projects::<T>::get(&project_id).ok_or(Error::<T>::ProjectDNE)?;
 			project.usage = project.usage.saturating_add(usage).min(project.quota);
-			if project.usage == project.quota {
-				Self::deposit_event(Event::ProjectReachedQuota { project_id: project_id.clone() });
-			};
+			let usage = project.usage;
 			Projects::<T>::insert(&project_id, project);
+			Self::deposit_event(Event::ProjectUsageUpdated { project_id, usage });
 			Ok(().into())
 		}
 
