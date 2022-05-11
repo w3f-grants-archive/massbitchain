@@ -8,7 +8,6 @@ use sc_service::{
 };
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sp_api::ConstructRuntimeApi;
-use sp_consensus::SlotData;
 use sp_consensus_aura::sr25519::{AuthorityId as AuraId, AuthorityPair as AuraPair};
 use sp_runtime::{traits::BlakeTwo256, OpaqueExtrinsic};
 use std::{sync::Arc, time::Duration};
@@ -162,7 +161,7 @@ where
 		telemetry.as_ref().map(|x| x.handle()),
 	)?;
 
-	let slot_duration = sc_consensus_aura::slot_duration(&*client)?.slot_duration();
+	let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
 
 	let import_queue =
 		sc_consensus_aura::import_queue::<AuraPair, _, _, _, _, _, _>(ImportQueueParams {
@@ -173,7 +172,7 @@ where
 				let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
 				let slot =
-					sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_duration(
+					sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 						*timestamp,
 						slot_duration,
 					);
@@ -201,7 +200,9 @@ where
 	})
 }
 
-fn start_node_impl<RuntimeApi, Executor>(config: Configuration) -> Result<TaskManager, ServiceError>
+fn start_node_impl<RuntimeApi, Executor>(
+	mut config: Configuration,
+) -> Result<TaskManager, ServiceError>
 where
 	RuntimeApi: ConstructRuntimeApi<Block, TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>>
 		+ Send
@@ -242,6 +243,16 @@ where
 		&config.chain_spec,
 	);
 
+	config
+		.network
+		.extra_sets
+		.push(sc_finality_grandpa::grandpa_peers_set_config(protocol_name.clone()));
+	let warp_sync = Arc::new(sc_finality_grandpa::warp_proof::NetworkProvider::new(
+		backend.clone(),
+		grandpa_link.shared_authority_set().clone(),
+		Vec::default(),
+	));
+
 	let (network, system_rpc_tx, network_starter) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
@@ -250,7 +261,7 @@ where
 			spawn_handle: task_manager.spawn_handle(),
 			import_queue,
 			block_announce_validator_builder: None,
-			warp_sync: None,
+			warp_sync: Some(warp_sync),
 		})?;
 
 	if config.offchain_worker.enabled {
@@ -307,7 +318,6 @@ where
 			sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone());
 
 		let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
-		let raw_slot_duration = slot_duration.slot_duration();
 
 		let aura = sc_consensus_aura::start_aura::<AuraPair, _, _, _, _, _, _, _, _, _, _, _>(
 			StartAuraParams {
@@ -320,9 +330,9 @@ where
 					let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
 					let slot =
-						sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_duration(
+						sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 							*timestamp,
-							raw_slot_duration,
+							slot_duration,
 						);
 
 					Ok((timestamp, slot))

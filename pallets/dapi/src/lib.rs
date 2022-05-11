@@ -489,9 +489,9 @@ where
 	) -> TransactionValidity {
 		if let Some(local_call) = call.is_sub_type() {
 			match local_call {
-				Call::submit_project_usage { .. }
-				| Call::register_provider { .. }
-				| Call::report_provider_offence { .. } => {
+				Call::submit_project_usage { .. } |
+				Call::register_provider { .. } |
+				Call::report_provider_offence { .. } => {
 					ensure!(<Regulators<T>>::get().contains(who), InvalidTransaction::BadSigner);
 				},
 				_ => {},

@@ -37,9 +37,8 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, St
 		"testnet" => Box::new(chain_spec::TestnetChainSpec::from_json_bytes(
 			&include_bytes!("../res/testnet.raw.json")[..],
 		)?),
-		path => {
-			Box::new(chain_spec::TestnetChainSpec::from_json_file(std::path::PathBuf::from(path))?)
-		},
+		path =>
+			Box::new(chain_spec::TestnetChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 	})
 }
 

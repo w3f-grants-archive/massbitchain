@@ -96,12 +96,12 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 	}
 
-	/// The invulnerable, fixed validators.
+	/// The fixed validators.
 	#[pallet::storage]
 	#[pallet::getter(fn invulnerables)]
 	pub type Invulnerables<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
-	/// The (community, limited) validator candidates.
+	/// The community validator candidates.
 	#[pallet::storage]
 	#[pallet::getter(fn candidates)]
 	pub type Candidates<T: Config> =
@@ -157,7 +157,7 @@ pub mod pallet {
 			assert_eq!(
 				invulnerables.len(),
 				self.invulnerables.len(),
-				"duplicate invulnerables in genesis."
+				"duplicate invulnerables in genesis"
 			);
 
 			assert!(
@@ -211,6 +211,13 @@ pub mod pallet {
 			new: Vec<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
 			T::UpdateOrigin::ensure_origin(origin)?;
+			// we trust origin calls, this is just a for more accurate benchmarking
+			if (new.len() as u32) > T::MaxInvulnerables::get() {
+				log::warn!(
+					"invulnerables > T::MaxInvulnerables; you might need to run benchmarks again"
+				);
+			}
+
 			for account_id in &new {
 				let validator_key = T::ValidatorIdOf::convert(account_id.clone())
 					.ok_or(Error::<T>::NoAssociatedValidatorId)?;
@@ -221,7 +228,6 @@ pub mod pallet {
 			}
 
 			<Invulnerables<T>>::put(&new);
-
 			Self::deposit_event(Event::NewInvulnerables(new));
 			Ok(().into())
 		}
@@ -236,6 +242,10 @@ pub mod pallet {
 			max: u32,
 		) -> DispatchResultWithPostInfo {
 			T::UpdateOrigin::ensure_origin(origin)?;
+			// we trust origin calls, this is just a for more accurate benchmarking
+			if max > T::MaxCandidates::get() {
+				log::warn!("max > T::MaxCandidates; you might need to run benchmarks again");
+			}
 			<DesiredCandidates<T>>::put(&max);
 			Self::deposit_event(Event::NewDesiredCandidates(max));
 			Ok(().into())
@@ -370,8 +380,8 @@ pub mod pallet {
 				.filter_map(|c| {
 					let last_block = <LastAuthoredBlock<T>>::get(&c.who);
 					let since_last = now.saturating_sub(last_block);
-					if since_last < kick_threshold ||
-						Self::candidates().len() as u32 <= T::MinCandidates::get()
+					if since_last < kick_threshold
+						|| Self::candidates().len() as u32 <= T::MinCandidates::get()
 					{
 						Some(c.who)
 					} else {
@@ -413,7 +423,13 @@ impl<T: Config + pallet_authorship::Config>
 }
 
 impl<T: Config> pallet_session::SessionManager<T::AccountId> for Pallet<T> {
-	fn new_session(_index: SessionIndex) -> Option<Vec<T::AccountId>> {
+	fn new_session(index: SessionIndex) -> Option<Vec<T::AccountId>> {
+		log::info!(
+			"assembling new validators for new session {} at #{:?}",
+			index,
+			<frame_system::Pallet<T>>::block_number(),
+		);
+
 		let candidates = Self::candidates();
 		let candidates_len_before = candidates.len();
 		let active_candidates = Self::kick_stale_candidates(candidates);
