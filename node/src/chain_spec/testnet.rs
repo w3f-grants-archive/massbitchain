@@ -2,7 +2,7 @@
 
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sr25519, Pair, Public};
+use sp_core::{crypto::Ss58Codec, sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
@@ -40,20 +40,22 @@ pub fn get_chain_spec() -> TestnetChainSpec {
 		ChainType::Development,
 		move || {
 			make_genesis(
-				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
-				// Sudo account
-				get_account_id_from_seed::<sr25519::Public>("Alice"),
-				// Pre-funded accounts
+				AccountId::from_ss58check("5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U")
+					.unwrap(),
 				vec![
-					get_account_id_from_seed::<sr25519::Public>("Alice"),
-					get_account_id_from_seed::<sr25519::Public>("Bob"),
-					get_account_id_from_seed::<sr25519::Public>("Dave"),
-					get_account_id_from_seed::<sr25519::Public>("Charlie"),
-					get_account_id_from_seed::<sr25519::Public>("Eve"),
-					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
+					AccountId::from_ss58check("5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U")
+						.unwrap(),
+					AccountId::from_ss58check("5EFnvxAut6NQYjGtvgznY3ZtWVDawmvPRpKhhBXcHD78f1sa")
+						.unwrap(),
+					AccountId::from_ss58check("5CUz6JXFnQP9BG58uLnzk4LyW3HP2ZdFz8W6b526hE6CgH7t")
+						.unwrap(),
+					AccountId::from_ss58check("5G3pQksbZWPWNuqgGh75zdgvpyBPQpiSdRE9pEuFyAYNDgrC")
+						.unwrap(),
+					AccountId::from_ss58check("5CD8hApvdMtc2WuQFJvvn1nXwTsbaZdSsEkqoy8sLCk1hh2h")
+						.unwrap(),
 				],
-				vec![get_account_id_from_seed::<sr25519::Public>("Ferdie")],
+				vec![authority_keys_from_seed("Alice")],
+				vec![],
 			)
 		},
 		vec![],
@@ -66,30 +68,26 @@ pub fn get_chain_spec() -> TestnetChainSpec {
 }
 
 fn make_genesis(
-	initial_authorities: Vec<(AccountId, AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
+	initial_authorities: Vec<(AccountId, AuraId, GrandpaId)>,
 	initial_regulators: Vec<AccountId>,
 ) -> GenesisConfig {
 	GenesisConfig {
 		system: SystemConfig { code: wasm_binary_unwrap().to_vec() },
 		balances: BalancesConfig {
-			balances: endowed_accounts
-				.iter()
-				.cloned()
-				.map(|k| (k, 100_000_000_000_000_000_000_000))
-				.collect(),
+			balances: endowed_accounts.iter().cloned().map(|k| (k, 200_000_000 * MBTT)).collect(),
 		},
 		block_reward: BlockRewardConfig {
 			// Make sure sum is 100
 			reward_config: pallet_block_reward::DistributionConfig {
-				providers_percent: Perbill::from_percent(100),
-				validators_percent: Perbill::zero(),
+				providers_percent: Perbill::from_percent(50),
+				validators_percent: Perbill::from_percent(50),
 			},
 		},
 		validator_set: ValidatorSetConfig {
 			desired_candidates: 200,
-			candidacy_bond: 1_00_000 * MBTT,
+			candidacy_bond: 20_000_000 * MBTT,
 			invulnerables: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
 		},
 		session: SessionConfig {

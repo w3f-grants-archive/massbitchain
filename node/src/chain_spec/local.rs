@@ -40,19 +40,16 @@ pub fn development_config() -> ChainSpec {
 		ChainType::Development,
 		move || {
 			make_genesis(
-				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice")],
-				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
-				// Pre-funded accounts
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
-					get_account_id_from_seed::<sr25519::Public>("Dave"),
 					get_account_id_from_seed::<sr25519::Public>("Charlie"),
+					get_account_id_from_seed::<sr25519::Public>("Dave"),
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
 				],
+				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
@@ -69,19 +66,15 @@ pub fn development_config() -> ChainSpec {
 }
 
 fn make_genesis(
-	initial_authorities: Vec<(AccountId, AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
+	initial_authorities: Vec<(AccountId, AuraId, GrandpaId)>,
 	initial_regulators: Vec<AccountId>,
 ) -> GenesisConfig {
 	GenesisConfig {
 		system: SystemConfig { code: wasm_binary_unwrap().to_vec() },
 		balances: BalancesConfig {
-			balances: endowed_accounts
-				.iter()
-				.cloned()
-				.map(|k| (k, 10_000_000_000_000_000_000_000))
-				.collect(),
+			balances: endowed_accounts.iter().cloned().map(|k| (k, 100_000 * MBTL)).collect(),
 		},
 		block_reward: BlockRewardConfig {
 			// Make sure sum is 100
