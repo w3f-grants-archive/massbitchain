@@ -17,3 +17,6 @@ pub type Nonce = u32;
 
 /// Some way of identifying an account on the chain.
 pub type AccountId = sp_runtime::AccountId32;
+
+/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
+pub type Signature = sp_runtime::MultiSignature;

@@ -5,7 +5,7 @@ use crate::{
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
 use sc_service::PartialComponents;
 
-use super::service::{self, dev, testnet};
+use super::service::{self, local, testnet};
 
 trait IdentifyChain {
 	fn is_dev(&self) -> bool;
@@ -37,8 +37,9 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, St
 		"testnet" => Box::new(chain_spec::TestnetChainSpec::from_json_bytes(
 			&include_bytes!("../res/testnet.raw.json")[..],
 		)?),
-		path =>
-			Box::new(chain_spec::TestnetChainSpec::from_json_file(std::path::PathBuf::from(path))?),
+		path => {
+			Box::new(chain_spec::TestnetChainSpec::from_json_file(std::path::PathBuf::from(path))?)
+		},
 	})
 }
 
@@ -99,7 +100,7 @@ pub fn run() -> sc_cli::Result<()> {
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						service::new_partial::<dev::RuntimeApi, dev::Executor>(&config)?;
+						service::new_partial::<local::RuntimeApi, local::Executor>(&config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			}
@@ -116,7 +117,7 @@ pub fn run() -> sc_cli::Result<()> {
 				runner
 					.sync_run(|config| cmd.run::<testnet_runtime::Block, testnet::Executor>(config))
 			} else {
-				runner.sync_run(|config| cmd.run::<local_runtime::Block, dev::Executor>(config))
+				runner.sync_run(|config| cmd.run::<local_runtime::Block, local::Executor>(config))
 			}
 		},
 		None => {
