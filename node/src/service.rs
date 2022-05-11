@@ -14,8 +14,8 @@ use std::{sync::Arc, time::Duration};
 
 use crate::primitives::*;
 
-/// Dev runtime executor
-pub mod dev {
+/// Local runtime executor
+pub mod local {
 	pub use local_runtime::RuntimeApi;
 
 	pub struct Executor;
@@ -404,7 +404,7 @@ where
 }
 
 pub fn start_dev_node(config: Configuration) -> Result<TaskManager, ServiceError> {
-	start_node_impl::<local_runtime::RuntimeApi, dev::Executor>(config)
+	start_node_impl::<local_runtime::RuntimeApi, local::Executor>(config)
 }
 
 pub fn start_testnet_node(config: Configuration) -> Result<TaskManager, ServiceError> {

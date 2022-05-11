@@ -1,20 +1,17 @@
-//! Development specifications.
+//! Local chain specifications.
 
 use local_runtime::{
 	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
 	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, SessionConfig, SessionKeys,
-	Signature, SudoConfig, SystemConfig, ValidatorSetConfig, MBTL,
+	SudoConfig, SystemConfig, ValidatorSetConfig, MBTL,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sr25519, Pair, Public};
+use sp_core::sr25519;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
-use sp_runtime::{
-	traits::{IdentifyAccount, Verify},
-	Perbill,
-};
+use sp_runtime::Perbill;
 
-use super::get_from_seed;
+use super::{get_account_id_from_seed, get_from_seed};
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
@@ -49,7 +46,7 @@ pub fn development_config() -> ChainSpec {
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
 				],
-				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
+				vec![authority_keys_from_seed("Alice")],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
@@ -99,14 +96,4 @@ fn make_genesis(
 		sudo: SudoConfig { key: Some(root_key) },
 		dapi: DapiConfig { regulators: initial_regulators.iter().map(|x| x.clone()).collect() },
 	}
-}
-
-type AccountPublic = <Signature as Verify>::Signer;
-
-/// Generate an account ID from seed.
-pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
-where
-	AccountPublic: From<<TPublic::Pair as Pair>::Public>,
-{
-	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
 }
