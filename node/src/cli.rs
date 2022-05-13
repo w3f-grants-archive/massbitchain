@@ -11,24 +11,24 @@ pub struct Cli {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
+	/// Build a chain specification.
+	BuildSpec(sc_cli::BuildSpecCmd),
+
+	/// Validate blocks.
+	CheckBlock(sc_cli::CheckBlockCmd),
+
 	/// Key management cli utilities
 	#[clap(subcommand)]
 	Key(KeySubcommand),
+
+	/// Sign a message, with a given (secret) key.
+	Sign(SignCmd),
 
 	/// Verify a signature for a message, provided on STDIN, with a given (public or secret) key.
 	Verify(VerifyCmd),
 
 	/// Generate a seed that provides a vanity address.
 	Vanity(VanityCmd),
-
-	/// Sign a message, with a given (secret) key.
-	Sign(SignCmd),
-
-	/// Build a chain specification.
-	BuildSpec(sc_cli::BuildSpecCmd),
-
-	/// Validate blocks.
-	CheckBlock(sc_cli::CheckBlockCmd),
 
 	/// The custom benchmark subcommand benchmarking runtime pallets.
 	#[cfg(feature = "runtime-benchmarks")]

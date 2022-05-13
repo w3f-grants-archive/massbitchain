@@ -1,7 +1,5 @@
 //! RPCs implementation.
 
-#![warn(missing_docs)]
-
 pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 use sp_api::ProvideRuntimeApi;
@@ -39,7 +37,6 @@ where
 	let FullDeps { client, pool, deny_unsafe } = deps;
 
 	io.extend_with(SystemApi::to_delegate(FullSystem::new(client.clone(), pool, deny_unsafe)));
-
 	io.extend_with(TransactionPaymentApi::to_delegate(TransactionPayment::new(client.clone())));
 
 	io

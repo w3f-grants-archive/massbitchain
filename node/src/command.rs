@@ -1,11 +1,11 @@
-use crate::{
-	chain_spec,
-	cli::{Cli, Subcommand},
-};
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
 use sc_service::PartialComponents;
 
-use super::service::{self, local, testnet};
+use crate::{
+	chain_spec,
+	cli::{Cli, Subcommand},
+	service::{self, local, testnet},
+};
 
 trait IdentifyChain {
 	fn is_dev(&self) -> bool;
@@ -34,12 +34,12 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, St
 	Ok(match id {
 		"dev" => Box::new(chain_spec::local::development_config()),
 		"testnet-dev" => Box::new(chain_spec::testnet::get_chain_spec()),
-		"testnet" => Box::new(chain_spec::TestnetChainSpec::from_json_bytes(
+		"testnet" => Box::new(chain_spec::testnet::TestnetChainSpec::from_json_bytes(
 			&include_bytes!("../res/testnet.raw.json")[..],
 		)?),
-		path => {
-			Box::new(chain_spec::TestnetChainSpec::from_json_file(std::path::PathBuf::from(path))?)
-		},
+		path => Box::new(chain_spec::testnet::TestnetChainSpec::from_json_file(
+			std::path::PathBuf::from(path),
+		)?),
 	})
 }
 
@@ -126,7 +126,7 @@ pub fn run() -> sc_cli::Result<()> {
 				if config.chain_spec.is_testnet() {
 					service::start_testnet_node(config).map_err(sc_cli::Error::Service)
 				} else {
-					service::start_dev_node(config).map_err(sc_cli::Error::Service)
+					service::start_local_node(config).map_err(sc_cli::Error::Service)
 				}
 			})
 		},

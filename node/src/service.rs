@@ -403,7 +403,7 @@ where
 	Ok(task_manager)
 }
 
-pub fn start_dev_node(config: Configuration) -> Result<TaskManager, ServiceError> {
+pub fn start_local_node(config: Configuration) -> Result<TaskManager, ServiceError> {
 	start_node_impl::<local_runtime::RuntimeApi, local::Executor>(config)
 }
 

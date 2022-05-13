@@ -153,7 +153,7 @@ impl pallet_dapi::Config for TestRuntime {
 	type Currency = Balances;
 	type DapiStaking = DapiStaking;
 	type UpdateOrigin = EnsureRoot<AccountId>;
-	type ChainIdMaxLength = ConstU32<64>;
+	type MaxChainIdLength = ConstU32<64>;
 	type MassbitId = MockProvider;
 	type OnProjectPayment = ();
 	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
