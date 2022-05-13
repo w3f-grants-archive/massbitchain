@@ -2,7 +2,7 @@
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit = "256"]
 
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::traits::Contains;
 use frame_support::{
 	construct_runtime, log, parameter_types,
@@ -22,6 +22,7 @@ use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
 use pallet_transaction_payment::{CurrencyAdapter, Multiplier, TargetedFeeAdjustment};
+use scale_info::TypeInfo;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -517,13 +518,13 @@ impl pallet_dapi::Config for Runtime {
 	type Currency = Balances;
 	type DapiStaking = DapiStaking;
 	type UpdateOrigin = EnsureRoot<AccountId>;
-	type ChainIdMaxLength = MaxBytesInChainId;
+	type MaxChainIdLength = MaxBytesInChainId;
 	type MassbitId = MassbitId;
 	type OnProjectPayment = OnProjectPayment;
 	type WeightInfo = pallet_dapi::weights::SubstrateWeight<Runtime>;
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug, scale_info::TypeInfo)]
+#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct MassbitId([u8; 36]);
 
 impl Default for MassbitId {

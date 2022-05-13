@@ -37,7 +37,7 @@ pub fn get_chain_spec() -> TestnetChainSpec {
 		ChainType::Live,
 		move || {
 			make_genesis(
-				AccountId::from_ss58check("5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U")
+				AccountId::from_ss58check("5HbP1yvzaUEFkvZC25UogU4heod4fmJNmDGCcBRF56Cr9VTb")
 					.unwrap(),
 				vec![
 					AccountId::from_ss58check("5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U")
@@ -73,13 +73,13 @@ fn make_genesis(
 	GenesisConfig {
 		system: SystemConfig { code: wasm_binary_unwrap().to_vec() },
 		balances: BalancesConfig {
-			balances: endowed_accounts.iter().cloned().map(|k| (k, 200_000_000 * MBTT)).collect(),
+			balances: endowed_accounts.iter().cloned().map(|k| (k, 2_000_000_000 * MBTT)).collect(),
 		},
 		block_reward: BlockRewardConfig {
 			// Make sure sum is 100
 			reward_config: pallet_block_reward::DistributionConfig {
-				providers_percent: Perbill::from_percent(50),
-				validators_percent: Perbill::from_percent(50),
+				providers_percent: Perbill::from_percent(100),
+				validators_percent: Perbill::from_percent(0),
 			},
 		},
 		validator_set: ValidatorSetConfig {

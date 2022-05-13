@@ -34,10 +34,9 @@ pub mod pallet {
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
 	/// Blockchain identifier, e.g `eth.mainnet`
-	type ChainId<T> = BoundedVec<u8, <T as Config>::ChainIdMaxLength>;
+	type ChainId<T> = BoundedVec<u8, <T as Config>::MaxChainIdLength>;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
@@ -56,10 +55,10 @@ pub mod pallet {
 		type UpdateOrigin: EnsureOrigin<Self::Origin>;
 
 		/// For constraining the maximum length of a Chain Id.
-		type ChainIdMaxLength: Get<u32>;
+		type MaxChainIdLength: Get<u32>;
 
 		/// The id type of Massbit provider or project.
-		type MassbitId: Parameter + Member + Default;
+		type MassbitId: Parameter + Member + Default + MaxEncodedLen;
 
 		/// Handle project payment as imbalance.
 		type OnProjectPayment: OnUnbalanced<
@@ -76,12 +75,11 @@ pub mod pallet {
 		ProjectDNE,
 		AlreadyExist,
 		InactiveProvider,
-		BadChainId,
 		ProviderDNE,
 		NotOwner,
 		PermissionDenied,
 		InvalidProviderStatus,
-		ChainIdDNE,
+		InvalidChainId,
 	}
 
 	#[pallet::event]
@@ -180,23 +178,22 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let consumer = ensure_signed(origin)?;
 			ensure!(!<Projects<T>>::contains_key(&project_id), Error::<T>::ProjectExists);
-			let bounded_chain_id: BoundedVec<u8, T::ChainIdMaxLength> =
-				chain_id.clone().try_into().map_err(|_| Error::<T>::BadChainId)?;
-			ensure!(Self::chain_ids().contains(&bounded_chain_id), Error::<T>::ChainIdDNE);
+			let bounded_chain_id: BoundedVec<u8, T::MaxChainIdLength> =
+				chain_id.clone().try_into().map_err(|_| Error::<T>::InvalidChainId)?;
+			ensure!(Self::chain_ids().contains(&bounded_chain_id), Error::<T>::InvalidChainId);
 
-			let payment = T::Currency::withdraw(
+			let imbalance = T::Currency::withdraw(
 				&consumer,
 				deposit,
 				WithdrawReasons::TRANSFER,
 				ExistenceRequirement::KeepAlive,
 			)?;
-			T::OnProjectPayment::on_unbalanced(payment);
+			T::OnProjectPayment::on_unbalanced(imbalance);
 			let quota = Self::calculate_quota(deposit);
 			<Projects<T>>::insert(
 				&project_id,
 				Project { consumer: consumer.clone(), chain_id: bounded_chain_id, quota, usage: 0 },
 			);
-
 			Self::deposit_event(Event::ProjectRegistered { project_id, consumer, chain_id, quota });
 			Ok(().into())
 		}
@@ -209,19 +206,16 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let consumer = ensure_signed(origin)?;
 			let mut project = Projects::<T>::get(&project_id).ok_or(Error::<T>::ProjectDNE)?;
-
 			let quota = project.quota.saturating_add(Self::calculate_quota(deposit));
 			project.quota = quota;
-
-			let payment = T::Currency::withdraw(
+			let imbalance = T::Currency::withdraw(
 				&consumer,
 				deposit,
 				WithdrawReasons::TRANSFER,
 				ExistenceRequirement::KeepAlive,
 			)?;
-			T::OnProjectPayment::on_unbalanced(payment);
+			T::OnProjectPayment::on_unbalanced(imbalance);
 			<Projects<T>>::insert(&project_id, project);
-
 			Self::deposit_event(Event::ProjectDeposited { project_id, new_quota: quota });
 			Ok(().into())
 		}
@@ -251,12 +245,11 @@ pub mod pallet {
 			chain_id: Vec<u8>,
 		) -> DispatchResultWithPostInfo {
 			let regulator = ensure_signed(origin)?;
-			ensure!(Self::regulators().contains(&regulator), Error::<T>::PermissionDenied);
+			ensure!(<Regulators<T>>::get().contains(&regulator), Error::<T>::PermissionDenied);
 			ensure!(!<Providers<T>>::contains_key(&provider_id), Error::<T>::AlreadyExist);
-			let bounded_chain_id: BoundedVec<u8, T::ChainIdMaxLength> =
-				chain_id.clone().try_into().map_err(|_| Error::<T>::BadChainId)?;
-			ensure!(Self::chain_ids().contains(&bounded_chain_id), Error::<T>::ChainIdDNE);
-
+			let bounded_chain_id: BoundedVec<u8, T::MaxChainIdLength> =
+				chain_id.clone().try_into().map_err(|_| Error::<T>::InvalidChainId)?;
+			ensure!(<ChainIds<T>>::get().contains(&bounded_chain_id), Error::<T>::InvalidChainId);
 			<Providers<T>>::insert(
 				&provider_id,
 				Provider {
@@ -266,7 +259,6 @@ pub mod pallet {
 					status: ProviderStatus::Registered,
 				},
 			);
-
 			Self::deposit_event(Event::ProviderRegistered {
 				provider_id,
 				provider_type,
@@ -289,11 +281,9 @@ pub mod pallet {
 				provider.status == ProviderStatus::Registered,
 				Error::<T>::InvalidProviderStatus
 			);
-
 			T::DapiStaking::register_provider(owner.clone(), provider_id.clone(), deposit)?;
 			provider.status = ProviderStatus::Active;
 			Providers::<T>::insert(&provider_id, provider.clone());
-
 			Self::deposit_event(Event::ProviderActivated {
 				provider_id,
 				provider_type: provider.provider_type,
@@ -338,7 +328,6 @@ pub mod pallet {
 			T::DapiStaking::unregister_provider(provider_id.clone())?;
 			provider.status = ProviderStatus::InActive { reason };
 			Providers::<T>::insert(&provider_id, provider.clone());
-
 			Self::deposit_event(Event::<T>::ProviderDeactivated {
 				provider_id,
 				provider_type: provider.provider_type,
@@ -355,10 +344,8 @@ pub mod pallet {
 			let _ = ensure_root(origin);
 			let mut regulators = Regulators::<T>::get();
 			ensure!(!regulators.contains(&account_id), Error::<T>::AlreadyExist);
-
 			regulators.insert(account_id.clone());
 			Regulators::<T>::put(&regulators);
-
 			Self::deposit_event(Event::RegulatorAdded { account_id });
 			Ok(().into())
 		}
@@ -371,10 +358,8 @@ pub mod pallet {
 			let _ = ensure_root(origin);
 			let mut regulators = Regulators::<T>::get();
 			ensure!(regulators.contains(&account_id), Error::<T>::PermissionDenied);
-
 			regulators.remove(&account_id);
 			Regulators::<T>::put(&regulators);
-
 			Self::deposit_event(Event::RegulatorRemoved { account_id });
 			Ok(().into())
 		}
@@ -382,14 +367,12 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::add_chain_id())]
 		pub fn add_chain_id(origin: OriginFor<T>, chain_id: Vec<u8>) -> DispatchResultWithPostInfo {
 			let _ = ensure_root(origin);
-			let bounded_chain_id: BoundedVec<u8, T::ChainIdMaxLength> =
-				chain_id.clone().try_into().map_err(|_| Error::<T>::BadChainId)?;
+			let bounded_chain_id: BoundedVec<u8, T::MaxChainIdLength> =
+				chain_id.clone().try_into().map_err(|_| Error::<T>::InvalidChainId)?;
 			let mut chain_ids = ChainIds::<T>::get();
 			ensure!(!chain_ids.contains(&bounded_chain_id), Error::<T>::AlreadyExist);
-
 			chain_ids.insert(bounded_chain_id);
 			ChainIds::<T>::put(&chain_ids);
-
 			Self::deposit_event(Event::ChainIdAdded { chain_id });
 			Ok(().into())
 		}
@@ -400,14 +383,12 @@ pub mod pallet {
 			chain_id: Vec<u8>,
 		) -> DispatchResultWithPostInfo {
 			let _ = ensure_root(origin);
-			let bounded_chain_id: BoundedVec<u8, T::ChainIdMaxLength> =
-				chain_id.clone().try_into().map_err(|_| Error::<T>::BadChainId)?;
+			let bounded_chain_id: BoundedVec<u8, T::MaxChainIdLength> =
+				chain_id.clone().try_into().map_err(|_| Error::<T>::InvalidChainId)?;
 			let mut chain_ids = ChainIds::<T>::get();
-			ensure!(chain_ids.contains(&bounded_chain_id), Error::<T>::ChainIdDNE);
-
+			ensure!(chain_ids.contains(&bounded_chain_id), Error::<T>::InvalidChainId);
 			chain_ids.remove(&bounded_chain_id);
 			ChainIds::<T>::put(&chain_ids);
-
 			Self::deposit_event(Event::ChainIdRemoved { chain_id });
 			Ok(().into())
 		}
@@ -489,9 +470,9 @@ where
 	) -> TransactionValidity {
 		if let Some(local_call) = call.is_sub_type() {
 			match local_call {
-				Call::submit_project_usage { .. } |
-				Call::register_provider { .. } |
-				Call::report_provider_offence { .. } => {
+				Call::submit_project_usage { .. }
+				| Call::register_provider { .. }
+				| Call::report_provider_offence { .. } => {
 					ensure!(<Regulators<T>>::get().contains(who), InvalidTransaction::BadSigner);
 				},
 				_ => {},

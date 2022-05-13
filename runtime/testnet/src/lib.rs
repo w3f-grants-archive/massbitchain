@@ -2,7 +2,7 @@
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit = "256"]
 
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::traits::Contains;
 use frame_support::{
 	construct_runtime, log, parameter_types,
@@ -21,7 +21,8 @@ use frame_system::{
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
-use pallet_transaction_payment::{Multiplier, TargetedFeeAdjustment};
+use pallet_transaction_payment::{CurrencyAdapter, Multiplier, TargetedFeeAdjustment};
+use scale_info::TypeInfo;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -74,8 +75,8 @@ pub fn wasm_binary_unwrap() -> &'static [u8] {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("massbit-local"),
-	impl_name: create_runtime_str!("massbit-local"),
+	spec_name: create_runtime_str!("massbit-testnet"),
+	impl_name: create_runtime_str!("massbit-testnet"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 1,
@@ -138,7 +139,8 @@ impl Contains<Call> for BaseFilter {
 		match call {
 			// These modules are not allowed to be called by transactions:
 			// To leave validator just shutdown it, next session funds will be released
-			Call::ValidatorSet(pallet_validator_set::Call::leave_intent { .. }) => false,
+			Call::ValidatorSet(pallet_validator_set::Call::register_as_candidate { .. })
+			| Call::ValidatorSet(pallet_validator_set::Call::leave_intent { .. }) => false,
 			// Other modules should works:
 			_ => true,
 		}
@@ -297,12 +299,12 @@ impl OnUnbalanced<NegativeImbalance> for DealWithFees {
 }
 
 impl pallet_transaction_payment::Config for Runtime {
-	type OnChargeTransaction = pallet_transaction_payment::CurrencyAdapter<Balances, DealWithFees>;
-	type WeightToFee = WeightToFee;
+	type OnChargeTransaction = CurrencyAdapter<Balances, DealWithFees>;
 	type OperationalFeeMultiplier = OperationalFeeMultiplier;
+	type WeightToFee = WeightToFee;
+	type LengthToFee = ConstantMultiplier<Balance, TransactionByteFee>;
 	type FeeMultiplierUpdate =
 		TargetedFeeAdjustment<Self, TargetBlockFullness, AdjustmentVariable, MinimumMultiplier>;
-	type LengthToFee = ConstantMultiplier<Balance, TransactionByteFee>;
 }
 
 impl pallet_sudo::Config for Runtime {
@@ -404,7 +406,7 @@ impl pallet_grandpa::Config for Runtime {
 }
 
 parameter_types! {
-	pub const SessionPeriod: BlockNumber = 2 * MINUTES;
+	pub const SessionPeriod: BlockNumber = 1 * HOURS;
 	pub const SessionOffset: BlockNumber = 0;
 }
 
@@ -477,8 +479,8 @@ impl pallet_block_reward::Config for Runtime {
 
 parameter_types! {
 	pub const DapiStakingPot: PalletId = PalletId(*b"dapistak");
-	pub const RegisterDeposit: Balance = 90 * MBTT;
-	pub const ProviderRewardsPercentage: Perbill = Perbill::from_percent(80);
+	pub const RegisterDeposit: Balance = 1000 * MBTT;
+	pub const ProviderRewardsPercentage: Perbill = Perbill::from_percent(100);
 	pub const MaxNumberOfStakersPerProvider: u32 = 10;
 	pub const MinimumStakingAmount: Balance = 10 * MBTT;
 	pub const MaxUnlockingChunks: u32 = 2;
@@ -517,13 +519,13 @@ impl pallet_dapi::Config for Runtime {
 	type Currency = Balances;
 	type DapiStaking = DapiStaking;
 	type UpdateOrigin = EnsureRoot<AccountId>;
-	type ChainIdMaxLength = MaxBytesInChainId;
+	type MaxChainIdLength = MaxBytesInChainId;
 	type MassbitId = MassbitId;
 	type OnProjectPayment = OnProjectPayment;
 	type WeightInfo = pallet_dapi::weights::SubstrateWeight<Runtime>;
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug, scale_info::TypeInfo)]
+#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct MassbitId([u8; 36]);
 
 impl Default for MassbitId {

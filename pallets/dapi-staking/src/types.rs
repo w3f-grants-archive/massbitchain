@@ -1,5 +1,5 @@
-use crate::EraIndex;
 use codec::{Decode, Encode, HasCompact};
+use frame_support::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::{
 	traits::{AtLeast32BitUnsigned, Zero},
@@ -7,13 +7,15 @@ use sp_runtime::{
 };
 use sp_std::{ops::Add, prelude::*};
 
-#[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
+use crate::EraIndex;
+
+#[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum ProviderStatus {
 	Active,
 	Inactive(EraIndex),
 }
 
-#[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct ProviderMetadata<AccountId> {
 	pub owner: AccountId,
 	pub status: ProviderStatus,
@@ -33,7 +35,7 @@ pub struct RewardInfo<Balance: HasCompact> {
 }
 
 /// A record for total rewards and total staked amount for an era.
-#[derive(PartialEq, Eq, Clone, Default, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(PartialEq, Eq, Clone, Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct EraMetadata<Balance: HasCompact> {
 	#[codec(compact)]
 	pub rewards: Balance,
@@ -43,7 +45,7 @@ pub struct EraMetadata<Balance: HasCompact> {
 
 /// Used to split total EraPayout among providers. Each tuple (provider, era) has this structure.
 /// This will be used to reward provider and its delegators.
-#[derive(Clone, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
+#[derive(Clone, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct ProviderEraMetadata<Balance: HasCompact> {
 	/// Provider bond amount.
 	#[codec(compact)]
@@ -127,7 +129,7 @@ impl<Balance: AtLeast32BitUnsigned + Copy> Delegation<Balance> {
 	pub fn stake(&mut self, current_era: EraIndex, amount: Balance) -> Result<(), &str> {
 		if let Some(stake) = self.stakes.last_mut() {
 			if stake.era > current_era {
-				return Err("Unexpected era".into())
+				return Err("Unexpected era".into());
 			}
 
 			let new_stake_amount = stake.amount.saturating_add(amount);
@@ -164,7 +166,7 @@ impl<Balance: AtLeast32BitUnsigned + Copy> Delegation<Balance> {
 	pub fn unstake(&mut self, current_era: EraIndex, amount: Balance) -> Result<(), &str> {
 		if let Some(stake) = self.stakes.last_mut() {
 			if stake.era > current_era {
-				return Err("Unexpected era".into())
+				return Err("Unexpected era".into());
 			}
 
 			let new_stake_amount = stake.amount.saturating_sub(amount);
@@ -312,7 +314,7 @@ where
 	}
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// The current era index and transition information
 pub struct EraInfo<BlockNumber> {
 	/// Current era index
@@ -326,19 +328,17 @@ impl<
 		B: Copy + sp_std::ops::Add<Output = B> + sp_std::ops::Sub<Output = B> + From<u32> + PartialOrd,
 	> EraInfo<B>
 {
-	pub fn new(current: EraIndex, first: B, length: u32) -> EraInfo<B> {
-		EraInfo { current, first_block: first, length }
+	pub fn new(current: EraIndex, first_block: B, length: u32) -> EraInfo<B> {
+		EraInfo { current, first_block, length }
 	}
 
-	/// Check if the era should be updated
-	pub fn should_update(&self, now: B) -> bool {
-		now - self.first_block >= self.length.into()
+	pub fn should_update(&self, current_block: B) -> bool {
+		current_block - self.first_block >= self.length.into()
 	}
 
-	/// New era
-	pub fn update(&mut self, now: B) {
+	pub fn update(&mut self, current_block: B) {
 		self.current = self.current.saturating_add(1u32);
-		self.first_block = now;
+		self.first_block = current_block;
 	}
 }
 impl<
@@ -346,6 +346,6 @@ impl<
 	> Default for EraInfo<B>
 {
 	fn default() -> EraInfo<B> {
-		EraInfo::new(1u32, 1u32.into(), 20u32)
+		EraInfo::new(1u32, 1u32.into(), 7200u32)
 	}
 }
