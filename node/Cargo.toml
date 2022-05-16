@@ -54,7 +54,7 @@ frame-benchmarking-cli = { git = "https://github.com/paritytech/substrate", bran
 polkadot-cli = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.19", optional = true }
 
 local-runtime = { path = "../runtime/local", version = "0.1.0" }
-testnet-runtime = { path = "../runtime/testnet", version = "0.1.0" }
+keiko-runtime = { path = "../runtime/keiko", version = "0.1.0" }
 
 [build-dependencies]
 build-script-utils = { package = "substrate-build-script-utils", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.19" }

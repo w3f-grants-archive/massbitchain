@@ -1,19 +1,19 @@
-//! Testnet specifications.
+//! Keiko specifications.
 
+use keiko_runtime::{
+	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
+	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, SessionConfig, SessionKeys,
+	SudoConfig, SystemConfig, ValidatorSetConfig, KEI,
+};
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::Ss58Codec, sr25519};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::Perbill;
-use testnet_runtime::{
-	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
-	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, SessionConfig, SessionKeys,
-	SudoConfig, SystemConfig, ValidatorSetConfig, MBTT,
-};
 
 use super::{get_account_id_from_seed, get_from_seed};
 
-pub type TestnetChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
+pub type KeikoChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
 fn session_keys(aura: AuraId, grandpa: GrandpaId) -> SessionKeys {
 	SessionKeys { aura, grandpa }
@@ -27,13 +27,13 @@ pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId) {
 	)
 }
 
-pub fn get_chain_spec() -> TestnetChainSpec {
+pub fn get_chain_spec() -> KeikoChainSpec {
 	let mut properties = serde_json::map::Map::new();
-	properties.insert("tokenSymbol".into(), "MBTT".into());
+	properties.insert("tokenSymbol".into(), "KEI".into());
 	properties.insert("tokenDecimals".into(), 18.into());
-	TestnetChainSpec::from_genesis(
-		"Testnet",
-		"testnet",
+	KeikoChainSpec::from_genesis(
+		"Keiko",
+		"keiko",
 		ChainType::Live,
 		move || {
 			make_genesis(
@@ -73,7 +73,7 @@ fn make_genesis(
 	GenesisConfig {
 		system: SystemConfig { code: wasm_binary_unwrap().to_vec() },
 		balances: BalancesConfig {
-			balances: endowed_accounts.iter().cloned().map(|k| (k, 2_000_000_000 * MBTT)).collect(),
+			balances: endowed_accounts.iter().cloned().map(|k| (k, 2_000_000_000 * KEI)).collect(),
 		},
 		block_reward: BlockRewardConfig {
 			// Make sure sum is 100
@@ -84,7 +84,7 @@ fn make_genesis(
 		},
 		validator_set: ValidatorSetConfig {
 			desired_candidates: 200,
-			candidacy_bond: 20_000_000 * MBTT,
+			candidacy_bond: 20_000_000 * KEI,
 			invulnerables: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
 		},
 		session: SessionConfig {

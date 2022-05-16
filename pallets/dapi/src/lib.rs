@@ -341,7 +341,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			account_id: T::AccountId,
 		) -> DispatchResultWithPostInfo {
-			let _ = ensure_root(origin);
+			ensure_root(origin)?;
 			let mut regulators = Regulators::<T>::get();
 			ensure!(!regulators.contains(&account_id), Error::<T>::AlreadyExist);
 			regulators.insert(account_id.clone());
@@ -355,7 +355,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			account_id: T::AccountId,
 		) -> DispatchResultWithPostInfo {
-			let _ = ensure_root(origin);
+			ensure_root(origin)?;
 			let mut regulators = Regulators::<T>::get();
 			ensure!(regulators.contains(&account_id), Error::<T>::PermissionDenied);
 			regulators.remove(&account_id);
@@ -366,7 +366,7 @@ pub mod pallet {
 
 		#[pallet::weight(T::WeightInfo::add_chain_id())]
 		pub fn add_chain_id(origin: OriginFor<T>, chain_id: Vec<u8>) -> DispatchResultWithPostInfo {
-			let _ = ensure_root(origin);
+			ensure_root(origin)?;
 			let bounded_chain_id: BoundedVec<u8, T::MaxChainIdLength> =
 				chain_id.clone().try_into().map_err(|_| Error::<T>::InvalidChainId)?;
 			let mut chain_ids = ChainIds::<T>::get();
@@ -382,7 +382,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			chain_id: Vec<u8>,
 		) -> DispatchResultWithPostInfo {
-			let _ = ensure_root(origin);
+			ensure_root(origin)?;
 			let bounded_chain_id: BoundedVec<u8, T::MaxChainIdLength> =
 				chain_id.clone().try_into().map_err(|_| Error::<T>::InvalidChainId)?;
 			let mut chain_ids = ChainIds::<T>::get();

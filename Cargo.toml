@@ -6,7 +6,7 @@ members = [
 	"pallets/dapi-staking",
 	"pallets/validator-set",
 	"runtime/local",
-	"runtime/testnet",
+    "runtime/keiko",
 ]
 [profile.release]
 panic = "unwind"

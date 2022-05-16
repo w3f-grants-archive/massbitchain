@@ -3,8 +3,8 @@ use sp_runtime::traits::{IdentifyAccount, Verify};
 
 use crate::primitives::{AccountId, Signature};
 
+pub mod keiko;
 pub mod local;
-pub mod testnet;
 
 /// Helper function to generate a crypto pair from seed
 fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {

@@ -4,20 +4,20 @@ use sc_service::PartialComponents;
 use crate::{
 	chain_spec,
 	cli::{Cli, Subcommand},
-	service::{self, local, testnet},
+	service::{self, keiko, local},
 };
 
 trait IdentifyChain {
 	fn is_dev(&self) -> bool;
-	fn is_testnet(&self) -> bool;
+	fn is_keiko(&self) -> bool;
 }
 
 impl IdentifyChain for dyn sc_service::ChainSpec {
 	fn is_dev(&self) -> bool {
 		self.id().starts_with("dev")
 	}
-	fn is_testnet(&self) -> bool {
-		self.id().starts_with("testnet")
+	fn is_keiko(&self) -> bool {
+		self.id().starts_with("keiko")
 	}
 }
 
@@ -25,19 +25,19 @@ impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
 	fn is_dev(&self) -> bool {
 		<dyn sc_service::ChainSpec>::is_dev(self)
 	}
-	fn is_testnet(&self) -> bool {
-		<dyn sc_service::ChainSpec>::is_testnet(self)
+	fn is_keiko(&self) -> bool {
+		<dyn sc_service::ChainSpec>::is_keiko(self)
 	}
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
 	Ok(match id {
 		"dev" => Box::new(chain_spec::local::development_config()),
-		"testnet-dev" => Box::new(chain_spec::testnet::get_chain_spec()),
-		"testnet" => Box::new(chain_spec::testnet::TestnetChainSpec::from_json_bytes(
-			&include_bytes!("../res/testnet.raw.json")[..],
+		"keiko-dev" => Box::new(chain_spec::keiko::get_chain_spec()),
+		"keiko" => Box::new(chain_spec::keiko::KeikoChainSpec::from_json_bytes(
+			&include_bytes!("../res/keiko.raw.json")[..],
 		)?),
-		path => Box::new(chain_spec::testnet::TestnetChainSpec::from_json_file(
+		path => Box::new(chain_spec::keiko::KeikoChainSpec::from_json_file(
 			std::path::PathBuf::from(path),
 		)?),
 	})
@@ -76,7 +76,7 @@ impl SubstrateCli for Cli {
 		if chain_spec.is_dev() {
 			&local_runtime::VERSION
 		} else {
-			&testnet_runtime::VERSION
+			&keiko_runtime::VERSION
 		}
 	}
 }
@@ -91,10 +91,10 @@ pub fn run() -> sc_cli::Result<()> {
 		},
 		Some(Subcommand::CheckBlock(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
-			if runner.config().chain_spec.is_testnet() {
+			if runner.config().chain_spec.is_keiko() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						service::new_partial::<testnet::RuntimeApi, testnet::Executor>(&config)?;
+						service::new_partial::<keiko::RuntimeApi, keiko::Executor>(&config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else {
@@ -113,9 +113,8 @@ pub fn run() -> sc_cli::Result<()> {
 		Some(Subcommand::Benchmark(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			let chain_spec = &runner.config().chain_spec;
-			if chain_spec.is_testnet() {
-				runner
-					.sync_run(|config| cmd.run::<testnet_runtime::Block, testnet::Executor>(config))
+			if chain_spec.is_keiko() {
+				runner.sync_run(|config| cmd.run::<keiko_runtime::Block, keiko::Executor>(config))
 			} else {
 				runner.sync_run(|config| cmd.run::<local_runtime::Block, local::Executor>(config))
 			}
@@ -123,8 +122,8 @@ pub fn run() -> sc_cli::Result<()> {
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
-				if config.chain_spec.is_testnet() {
-					service::start_testnet_node(config).map_err(sc_cli::Error::Service)
+				if config.chain_spec.is_keiko() {
+					service::start_keiko_node(config).map_err(sc_cli::Error::Service)
 				} else {
 					service::start_local_node(config).map_err(sc_cli::Error::Service)
 				}
