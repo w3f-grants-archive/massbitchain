@@ -3183,6 +3183,49 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
 
 [[package]]
+name = "keiko-runtime"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-executive",
+ "frame-support",
+ "frame-system",
+ "frame-system-benchmarking",
+ "frame-system-rpc-runtime-api",
+ "hex-literal",
+ "pallet-aura",
+ "pallet-authorship",
+ "pallet-balances",
+ "pallet-block-reward",
+ "pallet-dapi",
+ "pallet-dapi-staking",
+ "pallet-grandpa",
+ "pallet-identity",
+ "pallet-session",
+ "pallet-sudo",
+ "pallet-timestamp",
+ "pallet-transaction-payment",
+ "pallet-transaction-payment-rpc-runtime-api",
+ "pallet-utility",
+ "pallet-validator-set",
+ "parity-scale-codec",
+ "scale-info",
+ "smallvec",
+ "sp-api",
+ "sp-block-builder",
+ "sp-consensus-aura",
+ "sp-core",
+ "sp-inherents",
+ "sp-offchain",
+ "sp-runtime",
+ "sp-session",
+ "sp-std",
+ "sp-transaction-pool",
+ "sp-version",
+ "substrate-wasm-builder",
+]
+
+[[package]]
 name = "kernel32-sys"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4096,6 +4139,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "jsonrpc-core",
+ "keiko-runtime",
  "local-runtime",
  "pallet-transaction-payment-rpc",
  "polkadot-cli",
@@ -4128,7 +4172,6 @@ dependencies = [
  "sp-transaction-pool",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
- "testnet-runtime",
 ]
 
 [[package]]
@@ -10259,49 +10302,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "testnet-runtime"
-version = "0.1.0"
-dependencies = [
- "frame-benchmarking",
- "frame-executive",
- "frame-support",
- "frame-system",
- "frame-system-benchmarking",
- "frame-system-rpc-runtime-api",
- "hex-literal",
- "pallet-aura",
- "pallet-authorship",
- "pallet-balances",
- "pallet-block-reward",
- "pallet-dapi",
- "pallet-dapi-staking",
- "pallet-grandpa",
- "pallet-identity",
- "pallet-session",
- "pallet-sudo",
- "pallet-timestamp",
- "pallet-transaction-payment",
- "pallet-transaction-payment-rpc-runtime-api",
- "pallet-utility",
- "pallet-validator-set",
- "parity-scale-codec",
- "scale-info",
- "smallvec",
- "sp-api",
- "sp-block-builder",
- "sp-consensus-aura",
- "sp-core",
- "sp-inherents",
- "sp-offchain",
- "sp-runtime",
- "sp-session",
- "sp-std",
- "sp-transaction-pool",
- "sp-version",
- "substrate-wasm-builder",
 ]
 
 [[package]]

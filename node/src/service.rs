@@ -36,9 +36,9 @@ pub mod local {
 	}
 }
 
-/// Testnet runtime executor
-pub mod testnet {
-	pub use testnet_runtime::RuntimeApi;
+/// Keiko runtime executor
+pub mod keiko {
+	pub use keiko_runtime::RuntimeApi;
 
 	pub struct Executor;
 	impl sc_executor::NativeExecutionDispatch for Executor {
@@ -49,11 +49,11 @@ pub mod testnet {
 		type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
 
 		fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-			testnet_runtime::api::dispatch(method, data)
+			keiko_runtime::api::dispatch(method, data)
 		}
 
 		fn native_version() -> sc_executor::NativeVersion {
-			testnet_runtime::native_version()
+			keiko_runtime::native_version()
 		}
 	}
 }
@@ -407,6 +407,6 @@ pub fn start_local_node(config: Configuration) -> Result<TaskManager, ServiceErr
 	start_node_impl::<local_runtime::RuntimeApi, local::Executor>(config)
 }
 
-pub fn start_testnet_node(config: Configuration) -> Result<TaskManager, ServiceError> {
-	start_node_impl::<testnet_runtime::RuntimeApi, testnet::Executor>(config)
+pub fn start_keiko_node(config: Configuration) -> Result<TaskManager, ServiceError> {
+	start_node_impl::<keiko_runtime::RuntimeApi, keiko::Executor>(config)
 }

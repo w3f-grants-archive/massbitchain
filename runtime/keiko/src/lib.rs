@@ -50,8 +50,8 @@ pub use pallet_dapi_staking;
 pub use pallet_validator_set;
 
 /// Constant values used within the runtime.
-pub const MILLIMBTT: Balance = 1_000_000_000_000_000;
-pub const MBTT: Balance = 1_000 * MILLIMBTT;
+pub const MILLIKEI: Balance = 1_000_000_000_000_000;
+pub const KEI: Balance = 1_000 * MILLIKEI;
 
 pub const MILLISECS_PER_BLOCK: u64 = 12000;
 // Time is measured by number of blocks.
@@ -75,8 +75,8 @@ pub fn wasm_binary_unwrap() -> &'static [u8] {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("massbit-testnet"),
-	impl_name: create_runtime_str!("massbit-testnet"),
+	spec_name: create_runtime_str!("keiko"),
+	impl_name: create_runtime_str!("keiko"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 1,
@@ -212,9 +212,9 @@ impl pallet_timestamp::Config for Runtime {
 }
 
 parameter_types! {
-	pub const BasicDeposit: Balance = 10 * MBTT;       // 258 bytes on-chain
-	pub const FieldDeposit: Balance = 25 * MILLIMBTT;  // 66 bytes on-chain
-	pub const SubAccountDeposit: Balance = 2 * MBTT;   // 53 bytes on-chain
+	pub const BasicDeposit: Balance = 10 * KEI;       // 258 bytes on-chain
+	pub const FieldDeposit: Balance = 25 * MILLIKEI;  // 66 bytes on-chain
+	pub const SubAccountDeposit: Balance = 2 * KEI;   // 53 bytes on-chain
 	pub const MaxSubAccounts: u32 = 100;
 	pub const MaxAdditionalFields: u32 = 100;
 	pub const MaxRegistrars: u32 = 20;
@@ -253,7 +253,7 @@ impl pallet_balances::Config for Runtime {
 }
 
 parameter_types! {
-	pub const TransactionByteFee: Balance = MILLIMBTT / 100;
+	pub const TransactionByteFee: Balance = MILLIKEI / 100;
 	pub const TargetBlockFullness: Perquintill = Perquintill::from_percent(25);
 	pub const OperationalFeeMultiplier: u8 = 5;
 	pub AdjustmentVariable: Multiplier = Multiplier::saturating_from_rational(1, 100_000);
@@ -275,7 +275,7 @@ impl WeightToFeePolynomial for WeightToFee {
 	type Balance = Balance;
 	fn polynomial() -> WeightToFeeCoefficients<Self::Balance> {
 		// extrinsic base weight (smallest non-zero weight) is mapped to 1/10 mMBTT:
-		let p = MILLIMBTT;
+		let p = MILLIKEI;
 		let q = 10 * Balance::from(ExtrinsicBaseWeight::get());
 		smallvec::smallvec![WeightToFeeCoefficient {
 			degree: 1,
@@ -466,7 +466,7 @@ impl pallet_block_reward::BeneficiaryPayout<NegativeImbalance> for BeneficiaryPa
 }
 
 parameter_types! {
-	pub const RewardAmount: Balance = 1_000 * MILLIMBTT;
+	pub const RewardAmount: Balance = 1_000 * MILLIKEI;
 }
 
 impl pallet_block_reward::Config for Runtime {
@@ -479,10 +479,10 @@ impl pallet_block_reward::Config for Runtime {
 
 parameter_types! {
 	pub const DapiStakingPot: PalletId = PalletId(*b"dapistak");
-	pub const RegisterDeposit: Balance = 1000 * MBTT;
+	pub const RegisterDeposit: Balance = 100 * KEI;
 	pub const ProviderRewardsPercentage: Perbill = Perbill::from_percent(100);
 	pub const MaxNumberOfStakersPerProvider: u32 = 10;
-	pub const MinimumStakingAmount: Balance = 10 * MBTT;
+	pub const MinimumStakingAmount: Balance = 10 * KEI;
 	pub const MaxUnlockingChunks: u32 = 2;
 	pub const UnbondingPeriod: u32 = 2;
 	pub const MaxEraStakeValues: u32 = 5;

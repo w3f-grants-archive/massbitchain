@@ -1,5 +1,5 @@
 [package]
-name = "testnet-runtime"
+name = "keiko-runtime"
 authors = [ "Codelight" ]
 edition = "2021"
 version = "0.1.0"
