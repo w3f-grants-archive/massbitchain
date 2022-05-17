@@ -17,8 +17,7 @@
       },
       "validatorSet": {
         "invulnerables": [
-          "5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U",
-          "5EFnvxAut6NQYjGtvgznY3ZtWVDawmvPRpKhhBXcHD78f1sa"
+          "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
         ],
         "candidacyBond": 20000000000000000000000000,
         "desiredCandidates": 200
@@ -26,19 +25,27 @@
       "session": {
         "keys": [
           [
-            "5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U",
-            "5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U",
+            "5GKjNtFNWpvqVCbD4dMXbTXCe31oFdZbLFivMZPvJgRZkjif",
+            "5GKjNtFNWpvqVCbD4dMXbTXCe31oFdZbLFivMZPvJgRZkjif",
             {
-              "aura": "5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U",
-              "grandpa": "5Dft3sHaY57w5K5VMnz2cnUCPaw1H3RSFXSoJZu4v1H5LU5t"
+              "aura": "5GKjNtFNWpvqVCbD4dMXbTXCe31oFdZbLFivMZPvJgRZkjif",
+              "grandpa": "5G8YZrXZm2Y3mtwm7MUjNPWn1pjuGd5LPBzZXkoVgQgrCp9B"
             }
           ],
           [
-            "5EFnvxAut6NQYjGtvgznY3ZtWVDawmvPRpKhhBXcHD78f1sa",
-            "5EFnvxAut6NQYjGtvgznY3ZtWVDawmvPRpKhhBXcHD78f1sa",
+            "5DZFPuBrY2zGPKk9xTV4GvErD86XqFFH3SMjLbrDfrZidsRW",
+            "5DZFPuBrY2zGPKk9xTV4GvErD86XqFFH3SMjLbrDfrZidsRW",
             {
-              "aura": "5EFnvxAut6NQYjGtvgznY3ZtWVDawmvPRpKhhBXcHD78f1sa",
-              "grandpa": "5DWLh4WRFsFZAmMUdC9wYHcxeJTUF1WHRfT3yW51W7mDJXfx"
+              "aura": "5DZFPuBrY2zGPKk9xTV4GvErD86XqFFH3SMjLbrDfrZidsRW",
+              "grandpa": "5GLNJGTSqRvNCP59Uf8pVfEb36SkCBGVCGSpQ6GHq6joYfzu"
+            }
+          ],
+          [
+            "5Cg132mksNV7ntfpKrFRJ1fcHrhqtEU9MKBXKV71LGCSwhBz",
+            "5Cg132mksNV7ntfpKrFRJ1fcHrhqtEU9MKBXKV71LGCSwhBz",
+            {
+              "aura": "5Cg132mksNV7ntfpKrFRJ1fcHrhqtEU9MKBXKV71LGCSwhBz",
+              "grandpa": "5DKAqBNetLzeW7UF1JkyWGWUdteqsgZWGsvVUCHBJVus9eAn"
             }
           ]
         ]
@@ -52,29 +59,29 @@
       "balances": {
         "balances": [
           [
-            "5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U",
-            200000000000000000000000000
+            "5GKjNtFNWpvqVCbD4dMXbTXCe31oFdZbLFivMZPvJgRZkjif",
+            2000000000000000000000000000
           ],
           [
-            "5EFnvxAut6NQYjGtvgznY3ZtWVDawmvPRpKhhBXcHD78f1sa",
-            200000000000000000000000000
+            "5Gp4aP3CVYWixaM4jq5RKRP1nkG87mmH7913UNLhjeWh28p3",
+            2000000000000000000000000000
           ],
           [
-            "5CUz6JXFnQP9BG58uLnzk4LyW3HP2ZdFz8W6b526hE6CgH7t",
-            200000000000000000000000000
+            "5DZFPuBrY2zGPKk9xTV4GvErD86XqFFH3SMjLbrDfrZidsRW",
+            2000000000000000000000000000
           ],
           [
-            "5G3pQksbZWPWNuqgGh75zdgvpyBPQpiSdRE9pEuFyAYNDgrC",
-            200000000000000000000000000
+            "5Cg132mksNV7ntfpKrFRJ1fcHrhqtEU9MKBXKV71LGCSwhBz",
+            2000000000000000000000000000
           ],
           [
-            "5CD8hApvdMtc2WuQFJvvn1nXwTsbaZdSsEkqoy8sLCk1hh2h",
-            200000000000000000000000000
+            "5CyqNYGeb51y4qPJsAVjkeP3BWGUEmEytTWNdMtzqapK2WcY",
+            2000000000000000000000000000
           ]
         ]
       },
       "sudo": {
-        "key": "5HbP1yvzaUEFkvZC25UogU4heod4fmJNmDGCcBRF56Cr9VTb"
+        "key": "5GKjNtFNWpvqVCbD4dMXbTXCe31oFdZbLFivMZPvJgRZkjif"
       },
       "dapi": {
         "regulators": []
