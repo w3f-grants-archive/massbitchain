@@ -37,18 +37,18 @@ pub fn get_chain_spec() -> KeikoChainSpec {
 		ChainType::Live,
 		move || {
 			make_genesis(
-				AccountId::from_ss58check("5HbP1yvzaUEFkvZC25UogU4heod4fmJNmDGCcBRF56Cr9VTb")
+				AccountId::from_ss58check("5GKjNtFNWpvqVCbD4dMXbTXCe31oFdZbLFivMZPvJgRZkjif")
 					.unwrap(),
 				vec![
-					AccountId::from_ss58check("5GpgwTgTJeG15gL3rUfooHkKRDWWQyWCtEp454cF8zdPhf1U")
+					AccountId::from_ss58check("5GKjNtFNWpvqVCbD4dMXbTXCe31oFdZbLFivMZPvJgRZkjif")
 						.unwrap(),
-					AccountId::from_ss58check("5EFnvxAut6NQYjGtvgznY3ZtWVDawmvPRpKhhBXcHD78f1sa")
+					AccountId::from_ss58check("5Gp4aP3CVYWixaM4jq5RKRP1nkG87mmH7913UNLhjeWh28p3")
 						.unwrap(),
-					AccountId::from_ss58check("5CUz6JXFnQP9BG58uLnzk4LyW3HP2ZdFz8W6b526hE6CgH7t")
+					AccountId::from_ss58check("5DZFPuBrY2zGPKk9xTV4GvErD86XqFFH3SMjLbrDfrZidsRW")
 						.unwrap(),
-					AccountId::from_ss58check("5G3pQksbZWPWNuqgGh75zdgvpyBPQpiSdRE9pEuFyAYNDgrC")
+					AccountId::from_ss58check("5Cg132mksNV7ntfpKrFRJ1fcHrhqtEU9MKBXKV71LGCSwhBz")
 						.unwrap(),
-					AccountId::from_ss58check("5CD8hApvdMtc2WuQFJvvn1nXwTsbaZdSsEkqoy8sLCk1hh2h")
+					AccountId::from_ss58check("5CyqNYGeb51y4qPJsAVjkeP3BWGUEmEytTWNdMtzqapK2WcY")
 						.unwrap(),
 				],
 				vec![authority_keys_from_seed("Alice")],
