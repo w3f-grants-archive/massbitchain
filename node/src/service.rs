@@ -222,12 +222,12 @@ where
 				sp_runtime::generic::Header<u32, BlakeTwo256>,
 				OpaqueExtrinsic,
 			>,
-		> + frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+		> + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
 		+ pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
 	sc_client_api::StateBackendFor<TFullBackend<Block>, Block>: sp_api::StateBackend<BlakeTwo256>,
 	Executor: sc_executor::NativeExecutionDispatch + 'static,
 {
-	let sc_service::PartialComponents {
+	let PartialComponents {
 		client,
 		backend,
 		mut task_manager,
@@ -287,8 +287,7 @@ where
 		Box::new(move |deny_unsafe, _| {
 			let deps =
 				crate::rpc::FullDeps { client: client.clone(), pool: pool.clone(), deny_unsafe };
-
-			Ok(crate::rpc::create_full(deps))
+			crate::rpc::create_full(deps).map_err(Into::into)
 		})
 	};
 
@@ -298,7 +297,7 @@ where
 		keystore: keystore_container.sync_keystore(),
 		task_manager: &mut task_manager,
 		transaction_pool: transaction_pool.clone(),
-		rpc_extensions_builder,
+		rpc_builder: rpc_extensions_builder,
 		backend,
 		system_rpc_tx,
 		config,

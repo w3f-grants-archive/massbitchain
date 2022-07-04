@@ -12,7 +12,7 @@ use frame_support::{
 };
 use scale_info::TypeInfo;
 use sp_runtime::{
-	traits::{AccountIdConversion, CheckedSub, Convert, Saturating, Zero},
+	traits::{CheckedSub, Convert, Saturating, Zero},
 	Perbill,
 };
 use sp_staking::SessionIndex;
@@ -32,6 +32,7 @@ pub use pallet::*;
 pub mod pallet {
 	use super::*;
 	use frame_system::pallet_prelude::*;
+	use sp_runtime::traits::AccountIdConversion;
 
 	type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -69,7 +70,7 @@ pub mod pallet {
 		type UpdateOrigin: EnsureOrigin<Self::Origin>;
 
 		/// Account identifier from which the internal Pot is generated.
-		type PotId: Get<PalletId>;
+		type PalletId: Get<PalletId>;
 
 		/// Maximum number of candidates that we should have. This does not take into account the
 		/// invulnerables.
@@ -321,9 +322,9 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		/// Get a unique, inaccessible account id from the `PotId`.
+		/// Get a unique, inaccessible account id from the `PalletId`.
 		pub fn account_id() -> T::AccountId {
-			T::PotId::get().into_account()
+			T::PalletId::get().into_account_truncating()
 		}
 
 		/// Removes a candidate if they exist and sends them back their deposit
@@ -380,8 +381,8 @@ pub mod pallet {
 				.filter_map(|c| {
 					let last_block = <LastAuthoredBlock<T>>::get(&c.who);
 					let since_last = now.saturating_sub(last_block);
-					if since_last < kick_threshold
-						|| Self::candidates().len() as u32 <= T::MinCandidates::get()
+					if since_last < kick_threshold ||
+						Self::candidates().len() as u32 <= T::MinCandidates::get()
 					{
 						Some(c.who)
 					} else {

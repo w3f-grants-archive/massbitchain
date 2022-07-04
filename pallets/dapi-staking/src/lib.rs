@@ -10,7 +10,7 @@ use frame_support::{
 };
 use frame_system::ensure_signed;
 use sp_runtime::{
-	traits::{AccountIdConversion, CheckedAdd, Saturating, Zero},
+	traits::{CheckedAdd, Saturating, Zero},
 	ArithmeticError, Perbill,
 };
 use sp_std::convert::From;
@@ -34,6 +34,7 @@ pub mod pallet {
 	use super::*;
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
+	use sp_runtime::traits::AccountIdConversion;
 
 	pub(crate) type EraIndex = u32;
 	pub type BalanceOf<T> =
@@ -94,7 +95,7 @@ pub mod pallet {
 
 		/// dAPI staking pallet Id.
 		#[pallet::constant]
-		type PotId: Get<PalletId>;
+		type PalletId: Get<PalletId>;
 
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
@@ -349,8 +350,8 @@ pub mod pallet {
 				<ProviderEraInfo<T>>::get(&provider_id, era).unwrap_or_default();
 			let mut delegation = <DelegationInfo<T>>::get(&delegator, &provider_id);
 			ensure!(
-				!delegation.latest_staked_value().is_zero()
-					|| provider_era_info.delegator_count <= T::MaxDelegatorsPerProvider::get(),
+				!delegation.latest_staked_value().is_zero() ||
+					provider_era_info.delegator_count <= T::MaxDelegatorsPerProvider::get(),
 				Error::<T>::MaxNumberOfStakersExceeded
 			);
 			if delegation.latest_staked_value().is_zero() {
@@ -574,7 +575,7 @@ pub mod pallet {
 			let unregistered_era = if let ProviderStatus::Inactive(e) = provider_info.status {
 				e
 			} else {
-				return Err(Error::<T>::NotUnregisteredProvider.into());
+				return Err(Error::<T>::NotUnregisteredProvider.into())
 			};
 			let current_era = Self::current_era();
 			ensure!(
@@ -608,7 +609,7 @@ pub mod pallet {
 			let unregistered_era = if let ProviderStatus::Inactive(e) = provider_info.status {
 				e
 			} else {
-				return Err(Error::<T>::NotUnregisteredProvider.into());
+				return Err(Error::<T>::NotUnregisteredProvider.into())
 			};
 			let current_era = Self::current_era();
 			ensure!(
@@ -693,7 +694,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Get AccountId assigned to the pallet.
 		fn account_id() -> T::AccountId {
-			T::PotId::get().into_account()
+			T::PalletId::get().into_account_truncating()
 		}
 
 		/// Get current era.
@@ -741,7 +742,7 @@ pub mod pallet {
 			for (provider_id, provider) in ProviderInfo::<T>::iter() {
 				consumed_weight = consumed_weight.saturating_add(T::DbWeight::get().reads(1));
 				if let ProviderStatus::Inactive(_) = provider.status {
-					continue;
+					continue
 				}
 
 				if let Some(mut info) = <ProviderEraInfo<T>>::get(&provider_id, era) {

@@ -3,10 +3,9 @@
 #![recursion_limit = "256"]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::traits::Contains;
 use frame_support::{
 	construct_runtime, log, parameter_types,
-	traits::{Currency, Imbalance, KeyOwnerProofSystem, OnUnbalanced},
+	traits::{Contains, Currency, Imbalance, KeyOwnerProofSystem, OnUnbalanced},
 	weights::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		ConstantMultiplier, DispatchClass, Weight, WeightToFeeCoefficient, WeightToFeeCoefficients,
@@ -433,7 +432,7 @@ impl pallet_validator_set::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
 	type UpdateOrigin = EnsureRoot<AccountId>;
-	type PotId = ValidatorPot;
+	type PalletId = ValidatorPot;
 	type MaxCandidates = MaxCandidates;
 	type MinCandidates = MinCandidates;
 	type MaxInvulnerables = MaxInvulnerables;
@@ -446,7 +445,7 @@ impl pallet_validator_set::Config for Runtime {
 pub struct ToValidatorPot;
 impl OnUnbalanced<NegativeImbalance> for ToValidatorPot {
 	fn on_nonzero_unbalanced(amount: NegativeImbalance) {
-		let pot = ValidatorPot::get().into_account();
+		let pot = ValidatorPot::get().into_account_truncating();
 		Balances::resolve_creating(&pot, amount);
 	}
 }
@@ -498,7 +497,7 @@ impl pallet_dapi_staking::Config for Runtime {
 	type MaxEraStakeValues = MaxEraStakeValues;
 	type UnbondingPeriod = UnbondingPeriod;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
-	type PotId = DapiStakingPot;
+	type PalletId = DapiStakingPot;
 	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<Runtime>;
 }
 
