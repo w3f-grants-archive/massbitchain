@@ -19,28 +19,28 @@ RUN apt-get update  && apt install make clang pkg-config libssl-dev -y
 # Now copy in the rest of the sources
 COPY . /usr/src/massbitchain/
 
+RUN rustup update
+RUN rustup update nightly
+RUN rustup target add wasm32-unknown-unknown --toolchain nightly
 
 # This is the actual application build.
 RUN cargo build  --release
 
 ################
 # ##### Runtime
-FROM ubuntu AS runtime 
+FROM debian AS runtime
 
 # Copy application binary from builder image
-COPY --from=builder /usr/src/massbitchain/target/release/massbitchain /usr/local/bin
+COPY entrypoint.sh /usr/local/bin
+COPY --from=builder /usr/src/massbitchain/target/release/massbit-node /usr/local/bin
 
-EXPOSE 9944
+#EXPOSE 9944
 
-# Run the application
-CMD ["/usr/local/bin/massbitchain  --dev --alice --base-path=~/tmp/a --port=30334 --ws-port 9944 --ws-external --rpc-cors=all --rpc-methods=Unsafe --rpc-external"]
-
-
+ENTRYPOINT ["bash","entrypoint.sh"]
 
 
 # ###########################
-
-# FROM debian AS runtime 
+# FROM debian AS runtime
 
 # # Copy application binary from builder image
 # COPY massbit-node /usr/local/bin
