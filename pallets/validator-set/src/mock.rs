@@ -197,7 +197,7 @@ impl Config for TestRuntime {
 	type Event = Event;
 	type Currency = Balances;
 	type UpdateOrigin = EnsureSignedBy<RootAccount, u64>;
-	type PotId = PotId;
+	type PalletId = PotId;
 	type MaxCandidates = MaxCandidates;
 	type MinCandidates = MinCandidates;
 	type MaxInvulnerables = MaxInvulnerables;
