@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::Pallet;
-use pallet_dapi::DapiStaking;
+use common::DapiStaking;
 
 use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_support::traits::{Get, OnInitialize};

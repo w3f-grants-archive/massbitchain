@@ -18,19 +18,23 @@ use sp_runtime::{
 use sp_staking::SessionIndex;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 
-#[cfg(any(feature = "runtime-benchmarks"))]
-pub mod benchmarks;
 #[cfg(test)]
 mod mock;
 
+#[cfg(test)]
+mod tests;
+
+#[cfg(any(feature = "runtime-benchmarks"))]
+pub mod benchmarks;
+
 pub mod weights;
-pub use weights::WeightInfo;
 
 pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	pub use crate::weights::WeightInfo;
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::AccountIdConversion;
 

@@ -14,8 +14,8 @@ use sp_runtime::{
 	ConsensusEngineId, Perbill, RuntimeAppPublic,
 };
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
-type Block = frame_system::mocking::MockBlock<Test>;
+type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<TestRuntime>;
+type Block = frame_system::mocking::MockBlock<TestRuntime>;
 
 frame_support::construct_runtime!(
 	pub enum TestRuntime where
@@ -27,7 +27,6 @@ frame_support::construct_runtime!(
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
-		Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		ValidatorSet: validator_set::{Pallet, Call, Storage, Event<T>},
 		Authorship: pallet_authorship::{Pallet, Call, Storage, Inherent},
@@ -63,7 +62,7 @@ impl system::Config for TestRuntime {
 	type SystemWeightInfo = ();
 	type SS58Prefix = SS58Prefix;
 	type OnSetCode = ();
-	type MaxConsumers = frame_support::traits::ConstU32<16>;
+	type MaxConsumers = ConstU32<16>;
 }
 
 parameter_types! {
@@ -100,6 +99,10 @@ impl pallet_authorship::Config for TestRuntime {
 	type EventHandler = ValidatorSet;
 }
 
+parameter_types! {
+	pub const MinimumPeriod: u64 = 1;
+}
+
 impl pallet_timestamp::Config for TestRuntime {
 	type Moment = u64;
 	type OnTimestampSet = Aura;
@@ -120,7 +123,7 @@ sp_runtime::impl_opaque_keys! {
 }
 
 impl From<UintAuthorityId> for MockSessionKeys {
-	fn from(aura: sp_runtime::testing::UintAuthorityId) -> Self {
+	fn from(aura: UintAuthorityId) -> Self {
 		Self { aura }
 	}
 }
@@ -132,10 +135,10 @@ parameter_types! {
 
 pub struct TestSessionHandler;
 impl pallet_session::SessionHandler<u64> for TestSessionHandler {
-	const KEY_TYPE_IDS: &'static [sp_runtime::KeyTypeId] = &[UintAuthorityId::ID];
+	const KEY_TYPE_IDS: &'static [KeyTypeId] = &[UintAuthorityId::ID];
 
 	fn on_genesis_session<Ks: OpaqueKeys>(validators: &[(u64, Ks)]) {
-		SessionHandlerValidators::set(validators.into_iter().map(|a, _| *a).collect::<Vec<_>>());
+		SessionHandlerValidators::set(validators.into_iter().map(|(a, _)| *a).collect::<Vec<_>>());
 	}
 
 	fn on_new_session<Ks: OpaqueKeys>(
@@ -145,7 +148,7 @@ impl pallet_session::SessionHandler<u64> for TestSessionHandler {
 	) {
 		SessionChangeBlock::set(System::block_number());
 		dbg!(validators.len());
-		SessionHandlerValidator.set(validators.into_iter().map(|a, _| *a).collect::<Vec<_>>());
+		SessionHandlerValidators::set(validators.into_iter().map(|(a, _)| *a).collect::<Vec<_>>());
 	}
 
 	fn on_disabled(_validator_index: u32) {}

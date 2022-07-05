@@ -106,11 +106,11 @@ impl pallet_block_reward::BeneficiaryPayout<NegativeImbalanceOf<TestRuntime>>
 	for BeneficiaryPayout
 {
 	fn validators(reward: NegativeImbalanceOf<TestRuntime>) {
-		Balances::resolve_creating(&VALIDATOR_POT.into_account(), reward)
+		Balances::resolve_creating(&VALIDATOR_POT.into_account_truncating(), reward)
 	}
 
 	fn providers(reward: NegativeImbalanceOf<TestRuntime>) {
-		Balances::resolve_creating(&PROVIDER_POT.into_account(), reward)
+		Balances::resolve_creating(&PROVIDER_POT.into_account_truncating(), reward)
 	}
 }
 

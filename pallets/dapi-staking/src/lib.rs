@@ -15,8 +15,6 @@ use sp_runtime::{
 };
 use sp_std::convert::From;
 
-use pallet_dapi::DapiStaking;
-
 pub mod types;
 pub mod weights;
 
@@ -56,7 +54,7 @@ pub mod pallet {
 		type Currency: ReservableCurrency<Self::AccountId>;
 
 		/// Provider Id type.
-		type ProviderId: Parameter + Member + Default + MaxEncodedLen;
+		type ProviderId: Parameter + Member + Default;
 
 		/// Percentage of rewards paid to provider.
 		#[pallet::constant]
@@ -636,7 +634,7 @@ pub mod pallet {
 	}
 
 	impl<T: Config>
-		DapiStaking<
+		common::DapiStaking<
 			T::AccountId,
 			T::ProviderId,
 			<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance,

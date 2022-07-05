@@ -1,12 +1,13 @@
 [workspace]
 members = [
+	"common",
 	"node",
 	"pallets/block-reward",
 	"pallets/dapi",
 	"pallets/dapi-staking",
 	"pallets/validator-set",
+	"runtime/keiko",
 	"runtime/local",
-    "runtime/keiko",
 ]
 [profile.release]
 panic = "unwind"

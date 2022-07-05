@@ -1,11 +1,15 @@
-use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
-use sc_service::PartialComponents;
+//! Massbit node CLI handlers.
 
 use crate::{
 	chain_spec,
 	cli::{Cli, Subcommand},
 	service::{self, keiko, local},
 };
+use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
+use sc_service::PartialComponents;
+
+#[cfg(feature = "frame-benchmarking")]
+use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 
 trait IdentifyChain {
 	fn is_dev(&self) -> bool;
@@ -30,7 +34,7 @@ impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
 	}
 }
 
-fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
+fn load_spec(id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
 	Ok(match id {
 		"dev" => Box::new(chain_spec::local::development_config()),
 		"keiko-dev" => Box::new(chain_spec::keiko::get_chain_spec()),
@@ -113,10 +117,23 @@ pub fn run() -> sc_cli::Result<()> {
 		Some(Subcommand::Benchmark(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			let chain_spec = &runner.config().chain_spec;
-			if chain_spec.is_keiko() {
-				runner.sync_run(|config| cmd.run::<keiko_runtime::Block, keiko::Executor>(config))
-			} else {
-				runner.sync_run(|config| cmd.run::<local_runtime::Block, local::Executor>(config))
+			match cmd {
+				BenchmarkCmd::Pallet(cmd) =>
+					if chain_spec.is_keiko() {
+						runner.sync_run(|config| {
+							cmd.run::<keiko_runtime::Block, keiko::Executor>(config)
+						})
+					} else {
+						runner.sync_run(|config| {
+							cmd.run::<local_runtime::Block, local::Executor>(config)
+						})
+					},
+				BenchmarkCmd::Block(_) => Err("Benchmark block not supported.".into()),
+				BenchmarkCmd::Storage(_) => Err("Benchmark storage not supported.".into()),
+				BenchmarkCmd::Overhead(_) => Err("Benchmark overhead not supported.".into()),
+				BenchmarkCmd::Machine(cmd) =>
+					return runner
+						.sync_run(|config| cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone())),
 			}
 		},
 		None => {

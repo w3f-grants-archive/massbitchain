@@ -17,6 +17,8 @@ use sp_runtime::{
 	Perbill,
 };
 
+use common::MassbitId;
+
 pub(crate) type AccountId = u64;
 pub(crate) type BlockNumber = u64;
 pub(crate) type Balance = u128;
@@ -44,6 +46,7 @@ construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+		Dapi: pallet_dapi::{Pallet, Call, Storage, Config<T>, Event<T>},
 		DapiStaking: pallet_dapi_staking::{Pallet, Call, Storage, Event<T>},
 	}
 );
@@ -78,7 +81,7 @@ impl frame_system::Config for TestRuntime {
 	type SystemWeightInfo = ();
 	type SS58Prefix = ();
 	type OnSetCode = ();
-	type MaxConsumers = frame_support::traits::ConstU32<16>;
+	type MaxConsumers = ConstU32<16>;
 }
 
 parameter_types! {
@@ -123,7 +126,7 @@ parameter_types! {
 impl pallet_dapi_staking::Config for TestRuntime {
 	type Event = Event;
 	type Currency = Balances;
-	type ProviderId = MockProvider;
+	type ProviderId = MassbitId;
 	type ProviderRewardsPercentage = ProviderRewardsPercentage;
 	type MinProviderStake = MinProviderStake;
 	type MaxDelegatorsPerProvider = MaxDelegatorsPerProvider;
@@ -132,16 +135,7 @@ impl pallet_dapi_staking::Config for TestRuntime {
 	type UnbondingPeriod = UnbondingPeriod;
 	type MaxUnlockingChunks = MaxUnlockingChunks;
 	type PalletId = DapiStakingPalletId;
-	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
-}
-
-#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, Debug, scale_info::TypeInfo)]
-pub struct MockProvider([u8; 36]);
-
-impl Default for MockProvider {
-	fn default() -> Self {
-		MockProvider([1; 36])
-	}
+	type WeightInfo = pallet_dapi_staking::weights::SubstrateWeight<TestRuntime>;
 }
 
 parameter_types! {
@@ -154,7 +148,7 @@ impl pallet_dapi::Config for TestRuntime {
 	type DapiStaking = DapiStaking;
 	type UpdateOrigin = EnsureRoot<AccountId>;
 	type MaxChainIdLength = ConstU32<64>;
-	type MassbitId = MockProvider;
+	type MassbitId = MassbitId;
 	type OnProjectPayment = ();
 	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
 }

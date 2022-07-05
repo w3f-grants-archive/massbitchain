@@ -9,7 +9,6 @@ use frame_support::{
 use sp_runtime::traits::{DispatchInfoOf, Scale, SignedExtension};
 use sp_std::{collections::btree_set::BTreeSet, fmt::Debug, prelude::*};
 
-pub mod traits;
 pub mod types;
 pub mod weights;
 
@@ -19,7 +18,6 @@ pub mod benchmarks;
 mod mock;
 
 pub use pallet::*;
-pub use traits::*;
 pub use types::*;
 pub use weights::WeightInfo;
 
@@ -29,6 +27,7 @@ type BalanceOf<T> =
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use common::DapiStaking;
 	use frame_system::pallet_prelude::*;
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -49,7 +48,7 @@ pub mod pallet {
 		type Currency: Currency<Self::AccountId>;
 
 		/// dAPI staking helper.
-		type DapiStaking: DapiStaking<Self::AccountId, Self::MassbitId, BalanceOf<Self>>;
+		type DapiStaking: common::DapiStaking<Self::AccountId, Self::MassbitId, BalanceOf<Self>>;
 
 		/// The origin which can add/remove regulators.
 		type UpdateOrigin: EnsureOrigin<Self::Origin>;
@@ -58,7 +57,7 @@ pub mod pallet {
 		type MaxChainIdLength: Get<u32>;
 
 		/// The id type of Massbit provider or project.
-		type MassbitId: Parameter + Member + Default + MaxEncodedLen;
+		type MassbitId: Parameter + Member + Default;
 
 		/// Handle project payment as imbalance.
 		type OnProjectPayment: OnUnbalanced<
@@ -470,9 +469,9 @@ where
 	) -> TransactionValidity {
 		if let Some(local_call) = call.is_sub_type() {
 			match local_call {
-				Call::submit_project_usage { .. }
-				| Call::register_provider { .. }
-				| Call::report_provider_offence { .. } => {
+				Call::submit_project_usage { .. } |
+				Call::register_provider { .. } |
+				Call::report_provider_offence { .. } => {
 					ensure!(<Regulators<T>>::get().contains(who), InvalidTransaction::BadSigner);
 				},
 				_ => {},
