@@ -12,7 +12,7 @@ use frame_support::{
 };
 use scale_info::TypeInfo;
 use sp_runtime::{
-	traits::{CheckedSub, Convert, Saturating, Zero},
+	traits::{AccountIdConversion, CheckedSub, Convert, Saturating, Zero},
 	Perbill,
 };
 use sp_staking::SessionIndex;
@@ -36,7 +36,6 @@ pub mod pallet {
 	use super::*;
 	pub use crate::weights::WeightInfo;
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::AccountIdConversion;
 
 	type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -162,7 +161,7 @@ pub mod pallet {
 			assert_eq!(
 				invulnerables.len(),
 				self.invulnerables.len(),
-				"duplicate invulnerables in genesis"
+				"duplicate invulnerables in genesis."
 			);
 
 			assert!(

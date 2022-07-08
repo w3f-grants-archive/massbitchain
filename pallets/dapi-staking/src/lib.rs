@@ -2,39 +2,40 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::{
-	ensure,
-	traits::{Currency, ExistenceRequirement, Get, Imbalance, ReservableCurrency, WithdrawReasons},
-	weights::Weight,
-	PalletId,
-};
-use frame_system::ensure_signed;
-use sp_runtime::{
-	traits::{CheckedAdd, Saturating, Zero},
-	ArithmeticError, Perbill,
-};
-use sp_std::convert::From;
-
+pub mod traits;
 pub mod types;
 pub mod weights;
 
-#[cfg(any(feature = "runtime-benchmarks"))]
+#[cfg(any(test, feature = "runtime-benchmarks"))]
 pub mod benchmarks;
 #[cfg(test)]
 mod mock;
+#[cfg(test)]
+mod tests;
+
+use weights::WeightInfo;
 
 pub use pallet::*;
-pub use types::*;
-pub use weights::WeightInfo;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use super::*;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::AccountIdConversion;
+	use crate::{traits::DapiStakingRegistration, types::*, WeightInfo};
+	use frame_support::{
+		ensure,
+		pallet_prelude::*,
+		traits::{
+			Currency, ExistenceRequirement, Get, Imbalance, ReservableCurrency, WithdrawReasons,
+		},
+		weights::Weight,
+		PalletId,
+	};
+	use frame_system::{ensure_signed, pallet_prelude::*};
+	use sp_runtime::{
+		traits::{AccountIdConversion, CheckedAdd, Saturating, Zero},
+		ArithmeticError, Perbill,
+	};
+	use sp_std::convert::From;
 
-	pub(crate) type EraIndex = u32;
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 	pub type NegativeImbalanceOf<T> = <<T as Config>::Currency as Currency<
@@ -43,7 +44,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
-	pub struct Pallet<T>(_);
+	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -52,6 +53,10 @@ pub mod pallet {
 
 		/// The balance type of pallet.
 		type Currency: ReservableCurrency<Self::AccountId>;
+
+		/// Default number of blocks per era at genesis
+		#[pallet::constant]
+		type DefaultBlocksPerEra: Get<u32>;
 
 		/// Provider Id type.
 		type ProviderId: Parameter + Member + Default;
@@ -202,6 +207,7 @@ pub mod pallet {
 		NotUnregisteredProvider,
 		ProviderExists,
 		NoWritingSameValue,
+		CannotSetBelowMin,
 	}
 
 	#[pallet::hooks]
@@ -210,6 +216,9 @@ pub mod pallet {
 			let mut era = <Era<T>>::get();
 			if era.should_update(n) {
 				let previous_era = era.current;
+				if previous_era == 0 {
+					era.length = T::DefaultBlocksPerEra::get();
+				}
 				era.update(n);
 				<Era<T>>::put(era);
 
@@ -634,7 +643,7 @@ pub mod pallet {
 	}
 
 	impl<T: Config>
-		common::DapiStaking<
+		DapiStakingRegistration<
 			T::AccountId,
 			T::ProviderId,
 			<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance,

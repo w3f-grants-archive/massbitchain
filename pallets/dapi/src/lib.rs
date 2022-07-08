@@ -16,6 +16,8 @@ pub mod weights;
 pub mod benchmarks;
 #[cfg(test)]
 mod mock;
+#[cfg(test)]
+mod tests;
 
 pub use pallet::*;
 pub use types::*;
@@ -27,8 +29,8 @@ type BalanceOf<T> =
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use common::DapiStaking;
 	use frame_system::pallet_prelude::*;
+	use pallet_dapi_staking::traits::DapiStakingRegistration;
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
@@ -37,7 +39,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
-	pub struct Pallet<T>(_);
+	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -48,7 +50,7 @@ pub mod pallet {
 		type Currency: Currency<Self::AccountId>;
 
 		/// dAPI staking helper.
-		type DapiStaking: common::DapiStaking<Self::AccountId, Self::MassbitId, BalanceOf<Self>>;
+		type DapiStaking: DapiStakingRegistration<Self::AccountId, Self::MassbitId, BalanceOf<Self>>;
 
 		/// The origin which can add/remove regulators.
 		type UpdateOrigin: EnsureOrigin<Self::Origin>;

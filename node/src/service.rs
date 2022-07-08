@@ -188,7 +188,7 @@ where
 			telemetry: telemetry.as_ref().map(|x| x.handle()),
 		})?;
 
-	Ok(sc_service::PartialComponents {
+	Ok(PartialComponents {
 		client,
 		backend,
 		task_manager,

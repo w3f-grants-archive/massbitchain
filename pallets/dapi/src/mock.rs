@@ -1,13 +1,8 @@
 use crate::{self as pallet_dapi, weights};
 
-use frame_support::{
-	construct_runtime, parameter_types,
-	traits::{Currency, OnFinalize, OnInitialize, OnUnbalanced},
-	PalletId,
-};
-use sp_core::{H160, H256};
+use frame_support::{construct_runtime, parameter_types, PalletId};
+use sp_core::H256;
 
-use codec::{Decode, Encode};
 use frame_support::traits::ConstU32;
 use frame_system::EnsureRoot;
 use sp_io::TestExternalities;
@@ -35,7 +30,7 @@ pub(crate) const MIN_DELEGATOR_STAKE: Balance = 10;
 pub(crate) const MAX_UNLOCKING_CHUNKS: u32 = 4;
 pub(crate) const UNBONDING_PERIOD: EraIndex = 3;
 pub(crate) const MAX_ERA_STAKE_VALUES: u32 = 8;
-pub(crate) const BLOCK_REWARD: Balance = 1000;
+pub(crate) const BLOCKS_PER_ERA: u32 = 3;
 
 construct_runtime!(
 	pub enum TestRuntime where
@@ -121,11 +116,13 @@ parameter_types! {
 	pub const MaxUnlockingChunks: u32 = MAX_UNLOCKING_CHUNKS;
 	pub const UnbondingPeriod: EraIndex = UNBONDING_PERIOD;
 	pub const MaxEraStakeValues: u32 = MAX_ERA_STAKE_VALUES;
+	pub const DefaultBlocksPerEra: u32 = BLOCKS_PER_ERA;
 }
 
 impl pallet_dapi_staking::Config for TestRuntime {
 	type Event = Event;
 	type Currency = Balances;
+	type DefaultBlocksPerEra = DefaultBlocksPerEra;
 	type ProviderId = MassbitId;
 	type ProviderRewardsPercentage = ProviderRewardsPercentage;
 	type MinProviderStake = MinProviderStake;
@@ -151,6 +148,15 @@ impl pallet_dapi::Config for TestRuntime {
 	type MassbitId = MassbitId;
 	type OnProjectPayment = ();
 	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
+}
+
+#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, Debug, scale_info::TypeInfo)]
+pub struct MockProvider([u8; 36]);
+
+impl Default for MockProvider {
+	fn default() -> Self {
+		MockProvider([1; 36])
+	}
 }
 
 pub struct ExternalityBuilder;

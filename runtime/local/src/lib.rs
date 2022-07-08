@@ -485,11 +485,13 @@ parameter_types! {
 	pub const MaxUnlockingChunks: u32 = 2;
 	pub const UnbondingPeriod: u32 = 2;
 	pub const MaxEraStakeValues: u32 = 5;
+	pub const DefaultBlocksPerEra: u32 = 7200;
 }
 
 impl pallet_dapi_staking::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
+	type DefaultBlocksPerEra = DefaultBlocksPerEra;
 	type ProviderId = MassbitId;
 	type ProviderRewardsPercentage = ProviderRewardsPercentage;
 	type MinProviderStake = RegisterDeposit;

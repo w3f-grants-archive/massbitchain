@@ -1,13 +1,10 @@
-use crate::{self as pallet_dapi_staking, weights};
-
+use codec::{Decode, Encode};
 use frame_support::{
 	construct_runtime, parameter_types,
-	traits::{Currency, OnFinalize, OnInitialize, OnUnbalanced},
+	traits::{Currency, OnFinalize, OnInitialize},
 	PalletId,
 };
-use sp_core::{H160, H256};
-
-use codec::{Decode, Encode};
+use sp_core::H256;
 use sp_io::TestExternalities;
 use sp_runtime::{
 	testing::Header,
@@ -15,10 +12,11 @@ use sp_runtime::{
 	Perbill,
 };
 
+use crate::{self as pallet_dapi_staking, types::*, weights};
+
 pub(crate) type AccountId = u64;
 pub(crate) type BlockNumber = u64;
 pub(crate) type Balance = u128;
-pub(crate) type EraIndex = u32;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<TestRuntime>;
 type Block = frame_system::mocking::MockBlock<TestRuntime>;
@@ -31,7 +29,8 @@ pub(crate) const MIN_DELEGATOR_STAKE: Balance = 10;
 pub(crate) const MAX_UNLOCKING_CHUNKS: u32 = 4;
 pub(crate) const UNBONDING_PERIOD: EraIndex = 3;
 pub(crate) const MAX_ERA_STAKE_VALUES: u32 = 8;
-pub(crate) const BLOCK_REWARD: Balance = 1000;
+pub(crate) const BLOCKS_PER_ERA: u32 = 3;
+pub(crate) const BLOCK_REWARD: Balance = 123456;
 
 construct_runtime!(
 	pub enum TestRuntime where
@@ -116,11 +115,13 @@ parameter_types! {
 	pub const MaxUnlockingChunks: u32 = MAX_UNLOCKING_CHUNKS;
 	pub const UnbondingPeriod: EraIndex = UNBONDING_PERIOD;
 	pub const MaxEraStakeValues: u32 = MAX_ERA_STAKE_VALUES;
+	pub const DefaultBlocksPerEra: u32 = BLOCKS_PER_ERA;
 }
 
 impl pallet_dapi_staking::Config for TestRuntime {
 	type Event = Event;
 	type Currency = Balances;
+	type DefaultBlocksPerEra = DefaultBlocksPerEra;
 	type ProviderId = MockProvider;
 	type ProviderRewardsPercentage = ProviderRewardsPercentage;
 	type MinProviderStake = MinProviderStake;
@@ -174,4 +175,43 @@ impl ExternalityBuilder {
 		ext.execute_with(|| System::set_block_number(1));
 		ext
 	}
+}
+
+/// Run to the specified block number
+pub fn run_to_block(n: u64) {
+	while System::block_number() < n {
+		DapiStaking::on_finalize(System::block_number());
+		System::set_block_number(System::block_number() + 1);
+		// This is performed outside of dapi staking but we expect it before on_initialize
+		payout_block_rewards();
+		DapiStaking::on_initialize(System::block_number());
+	}
+}
+
+/// Run the specified number of blocks
+pub fn run_for_blocks(n: u64) {
+	run_to_block(System::block_number() + n);
+}
+
+/// Advance blocks to the beginning of an era. Function has no effect if era is already passed.
+pub fn advance_to_era(n: EraIndex) {
+	while DapiStaking::era().current < n {
+		run_for_blocks(1);
+	}
+}
+
+/// Initialize first block.
+pub fn initialize_first_block() {
+	// This assert prevents method misuse
+	assert_eq!(System::block_number(), 1 as BlockNumber);
+
+	// This is performed outside of dapi staking but we expect it before on_initialize
+	payout_block_rewards();
+	DapiStaking::on_initialize(System::block_number());
+	run_to_block(2);
+}
+
+/// Payout block rewards to providers & delegators
+fn payout_block_rewards() {
+	DapiStaking::handle_imbalance(Balances::issue(BLOCK_REWARD.into()));
 }

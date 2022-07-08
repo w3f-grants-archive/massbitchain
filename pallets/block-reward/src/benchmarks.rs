@@ -31,7 +31,7 @@ mod tests {
 }
 
 impl_benchmark_test_suite!(
-	BlockReward,
+	Pallet,
 	crate::benchmarks::tests::new_test_ext(),
 	crate::mock::TestRuntime,
 );

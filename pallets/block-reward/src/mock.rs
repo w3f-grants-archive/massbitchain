@@ -1,10 +1,7 @@
 use crate::{self as pallet_block_reward, NegativeImbalanceOf};
 
 use frame_support::{
-	construct_runtime, parameter_types,
-	sp_io::TestExternalities,
-	traits::{Currency, Get},
-	PalletId,
+	construct_runtime, parameter_types, sp_io::TestExternalities, traits::Currency, PalletId,
 };
 
 use sp_core::H256;

@@ -1,13 +1,12 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use super::*;
-use crate::Pallet;
-use common::DapiStaking;
+use crate::{traits::DapiStakingRegistration, types::*, Pallet};
 
 use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite, whitelisted_caller};
-use frame_support::traits::{Get, OnInitialize};
+use frame_support::traits::{Currency, Get, OnInitialize};
 use frame_system::{Pallet as System, RawOrigin};
-use sp_runtime::traits::{Bounded, One};
+use sp_runtime::traits::{Bounded, One, Zero};
 use sp_std::vec::Vec;
 
 const SEED: u32 = 9000;
@@ -233,7 +232,7 @@ mod tests {
 }
 
 impl_benchmark_test_suite!(
-	DapiStaking,
+	Pallet,
 	crate::benchmarks::tests::new_test_ext(),
 	crate::mock::TestRuntime,
 );

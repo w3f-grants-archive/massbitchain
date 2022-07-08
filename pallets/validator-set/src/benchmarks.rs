@@ -230,18 +230,4 @@ benchmarks! {
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	use crate::mock;
-	use frame_support::sp_io::TestExternalities;
-
-	pub fn new_test_ext() -> TestExternalities {
-		mock::ExternalityBuilder::build()
-	}
-}
-
-impl_benchmark_test_suite!(
-	ValidatorSet,
-	crate::benchmarks::tests::new_test_ext(),
-	crate::mock::TestRuntime,
-);
+impl_benchmark_test_suite!(ValidatorSet, crate::mock::new_test_ext(), crate::mock::TestRuntime,);

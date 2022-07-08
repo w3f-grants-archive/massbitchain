@@ -6,7 +6,7 @@ use sp_runtime::{
 };
 use sp_std::{ops::Add, prelude::*};
 
-use crate::EraIndex;
+pub type EraIndex = u32;
 
 #[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum ProviderStatus {
@@ -313,7 +313,7 @@ where
 	}
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Default, Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
 /// The current era index and transition information
 pub struct EraInfo<BlockNumber> {
 	/// Current era index
@@ -323,6 +323,7 @@ pub struct EraInfo<BlockNumber> {
 	/// The length of the current era in number of blocks
 	pub length: u32,
 }
+
 impl<
 		B: Copy + sp_std::ops::Add<Output = B> + sp_std::ops::Sub<Output = B> + From<u32> + PartialOrd,
 	> EraInfo<B>
@@ -332,19 +333,11 @@ impl<
 	}
 
 	pub fn should_update(&self, current_block: B) -> bool {
-		current_block - self.first_block >= self.length.into()
+		current_block - self.first_block >= self.length.into() || self.current == 0
 	}
 
 	pub fn update(&mut self, current_block: B) {
 		self.current = self.current.saturating_add(1u32);
 		self.first_block = current_block;
-	}
-}
-impl<
-		B: Copy + sp_std::ops::Add<Output = B> + sp_std::ops::Sub<Output = B> + From<u32> + PartialOrd,
-	> Default for EraInfo<B>
-{
-	fn default() -> EraInfo<B> {
-		EraInfo::new(1u32, 1u32.into(), 7200u32)
 	}
 }

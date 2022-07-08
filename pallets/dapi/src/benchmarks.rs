@@ -137,7 +137,7 @@ mod tests {
 }
 
 impl_benchmark_test_suite!(
-	Dapi,
+	Pallet,
 	crate::benchmarks::tests::new_test_ext(),
 	crate::mock::TestRuntime,
 );
