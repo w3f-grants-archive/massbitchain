@@ -130,7 +130,6 @@ impl ExternalityBuilder {
 		let mut storage =
 			frame_system::GenesisConfig::default().build_storage::<TestRuntime>().unwrap();
 
-		// This will cause some initial issuance
 		pallet_balances::GenesisConfig::<TestRuntime> {
 			balances: vec![(1, 9000), (2, 800), (3, 10000)],
 		}

@@ -150,15 +150,6 @@ impl pallet_dapi::Config for TestRuntime {
 	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, Debug, scale_info::TypeInfo)]
-pub struct MockProvider([u8; 36]);
-
-impl Default for MockProvider {
-	fn default() -> Self {
-		MockProvider([1; 36])
-	}
-}
-
 pub struct ExternalityBuilder;
 
 impl ExternalityBuilder {
