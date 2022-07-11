@@ -78,6 +78,7 @@ pub mod pallet {
 		InactiveProvider,
 		ProviderDNE,
 		NotOwner,
+		NotRegulator,
 		PermissionDenied,
 		InvalidProviderStatus,
 		InvalidChainId,
@@ -358,7 +359,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			let mut regulators = Regulators::<T>::get();
-			ensure!(regulators.contains(&account_id), Error::<T>::PermissionDenied);
+			ensure!(regulators.contains(&account_id), Error::<T>::NotRegulator);
 			regulators.remove(&account_id);
 			Regulators::<T>::put(&regulators);
 			Self::deposit_event(Event::RegulatorRemoved { account_id });

@@ -1,4 +1,3 @@
-use codec::{Decode, Encode};
 use frame_support::{
 	construct_runtime, parameter_types,
 	traits::{Currency, OnFinalize, OnInitialize},
@@ -13,6 +12,7 @@ use sp_runtime::{
 };
 
 use crate::{self as pallet_dapi_staking, types::*, weights};
+use common::MassbitId;
 
 pub(crate) type AccountId = u64;
 pub(crate) type BlockNumber = u64;
@@ -122,7 +122,7 @@ impl pallet_dapi_staking::Config for TestRuntime {
 	type Event = Event;
 	type Currency = Balances;
 	type DefaultBlocksPerEra = DefaultBlocksPerEra;
-	type ProviderId = MockProvider;
+	type ProviderId = MassbitId;
 	type ProviderRewardsPercentage = ProviderRewardsPercentage;
 	type MinProviderStake = MinProviderStake;
 	type MaxDelegatorsPerProvider = MaxDelegatorsPerProvider;
@@ -132,15 +132,6 @@ impl pallet_dapi_staking::Config for TestRuntime {
 	type MaxUnlockingChunks = MaxUnlockingChunks;
 	type PalletId = DapiStakingPalletId;
 	type WeightInfo = weights::SubstrateWeight<TestRuntime>;
-}
-
-#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, Debug, scale_info::TypeInfo)]
-pub struct MockProvider([u8; 36]);
-
-impl Default for MockProvider {
-	fn default() -> Self {
-		MockProvider([1; 36])
-	}
 }
 
 pub struct ExternalityBuilder;
@@ -204,7 +195,6 @@ pub fn advance_to_era(n: EraIndex) {
 pub fn initialize_first_block() {
 	// This assert prevents method misuse
 	assert_eq!(System::block_number(), 1 as BlockNumber);
-
 	// This is performed outside of dapi staking but we expect it before on_initialize
 	payout_block_rewards();
 	DapiStaking::on_initialize(System::block_number());

@@ -1,10 +1,12 @@
 use crate::{self as pallet_dapi, weights};
 
-use frame_support::{construct_runtime, parameter_types, PalletId};
-use sp_core::H256;
-
-use frame_support::traits::ConstU32;
+use frame_support::{
+	construct_runtime, parameter_types,
+	traits::{ConstU32, GenesisBuild},
+	PalletId,
+};
 use frame_system::EnsureRoot;
+use sp_core::H256;
 use sp_io::TestExternalities;
 use sp_runtime::{
 	testing::Header,
@@ -177,6 +179,10 @@ impl ExternalityBuilder {
 		}
 		.assimilate_storage(&mut storage)
 		.ok();
+
+		pallet_dapi::GenesisConfig::<TestRuntime> { regulators: vec![10] }
+			.assimilate_storage(&mut storage)
+			.ok();
 
 		let mut ext = TestExternalities::from(storage);
 		ext.execute_with(|| System::set_block_number(1));

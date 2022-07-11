@@ -12,3 +12,9 @@ impl Default for MassbitId {
 		MassbitId([1; 36])
 	}
 }
+
+impl MassbitId {
+	pub fn repeat_byte(byte: u8) -> Self {
+		MassbitId([byte; 36])
+	}
+}

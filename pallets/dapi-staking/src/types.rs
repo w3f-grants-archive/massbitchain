@@ -4,7 +4,10 @@ use sp_runtime::{
 	traits::{AtLeast32BitUnsigned, Zero},
 	RuntimeDebug,
 };
-use sp_std::{ops::Add, prelude::*};
+use sp_std::{
+	ops::{Add, Sub},
+	vec::Vec,
+};
 
 pub type EraIndex = u32;
 
@@ -43,7 +46,6 @@ pub struct EraMetadata<Balance: HasCompact> {
 }
 
 /// Used to split total EraPayout among providers. Each tuple (provider, era) has this structure.
-/// This will be used to reward provider and its delegators.
 #[derive(Clone, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
 pub struct ProviderEraMetadata<Balance: HasCompact> {
 	/// Provider bond amount.
@@ -159,7 +161,7 @@ impl<Balance: AtLeast32BitUnsigned + Copy> Delegation<Balance> {
 	/// # Example 2
 	///
 	/// `stakes: [<5, 1000>]`
-	/// * `unstake(1000, 0)` will result in `[]`
+	/// * `unstake(6, 1000)` will result in `[]`
 	///
 	/// Note that if no unclaimed eras remain, vector will be cleared.
 	pub fn unstake(&mut self, current_era: EraIndex, amount: Balance) -> Result<(), &str> {
@@ -311,6 +313,12 @@ where
 		) = self.unlocking_chunks.iter().partition(|chunk| chunk.unlock_era <= era);
 		(Self { unlocking_chunks: matching_chunks }, Self { unlocking_chunks: other_chunks })
 	}
+
+	#[cfg(test)]
+	/// Return clone of the internal vector. Should only be used for testing.
+	pub fn vec(&self) -> Vec<UnlockingChunk<Balance>> {
+		self.unlocking_chunks.clone()
+	}
 }
 
 #[derive(Default, Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -324,10 +332,7 @@ pub struct EraInfo<BlockNumber> {
 	pub length: u32,
 }
 
-impl<
-		B: Copy + sp_std::ops::Add<Output = B> + sp_std::ops::Sub<Output = B> + From<u32> + PartialOrd,
-	> EraInfo<B>
-{
+impl<B: Copy + Add<Output = B> + Sub<Output = B> + From<u32> + PartialOrd> EraInfo<B> {
 	pub fn new(current: EraIndex, first_block: B, length: u32) -> EraInfo<B> {
 		EraInfo { current, first_block, length }
 	}
