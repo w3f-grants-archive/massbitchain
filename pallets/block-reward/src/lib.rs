@@ -183,6 +183,6 @@ pub trait BeneficiaryPayout<Imbalance> {
 	/// Payout reward to the validators
 	fn validators(reward: Imbalance);
 
-	/// Payout reward to providers
+	/// Payout reward to providers and its delegators
 	fn providers(reward: Imbalance);
 }

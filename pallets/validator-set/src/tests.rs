@@ -9,7 +9,7 @@ use sp_runtime::traits::BadOrigin;
 
 #[test]
 fn basic_setup_works() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		assert_eq!(ValidatorSet::desired_candidates(), 2);
 		assert_eq!(ValidatorSet::candidacy_bond(), 10);
 
@@ -20,7 +20,7 @@ fn basic_setup_works() {
 
 #[test]
 fn set_invulnerables() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		let new_invulnerables = vec![1, 2, 3];
 		assert_ok!(ValidatorSet::set_invulnerables(
 			Origin::signed(RootAccount::get()),
@@ -48,7 +48,7 @@ fn set_invulnerables() {
 
 #[test]
 fn set_desired_candidates() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		assert_eq!(ValidatorSet::desired_candidates(), 2);
 
 		assert_ok!(ValidatorSet::set_desired_candidates(Origin::signed(RootAccount::get()), 7));
@@ -60,7 +60,7 @@ fn set_desired_candidates() {
 
 #[test]
 fn set_candidacy_bond() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		assert_eq!(ValidatorSet::candidacy_bond(), 10);
 
 		assert_ok!(ValidatorSet::set_candidacy_bond(Origin::signed(RootAccount::get()), 7));
@@ -72,7 +72,7 @@ fn set_candidacy_bond() {
 
 #[test]
 fn cannot_register_candidate_if_too_many() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		<crate::DesiredCandidates<TestRuntime>>::put(0);
 
 		assert_noop!(
@@ -92,7 +92,7 @@ fn cannot_register_candidate_if_too_many() {
 
 #[test]
 fn cannot_unregister_candidate_if_too_few() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		<crate::DesiredCandidates<TestRuntime>>::put(1);
 		assert_ok!(ValidatorSet::register_as_candidate(Origin::signed(4)));
 		assert_noop!(
@@ -104,7 +104,7 @@ fn cannot_unregister_candidate_if_too_few() {
 
 #[test]
 fn cannot_register_as_candidate_if_already_invulnerable() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		assert_eq!(ValidatorSet::invulnerables(), vec![1, 2]);
 		assert_noop!(
 			ValidatorSet::register_as_candidate(Origin::signed(1)),
@@ -115,7 +115,7 @@ fn cannot_register_as_candidate_if_already_invulnerable() {
 
 #[test]
 fn cannot_register_duplicate_candidate() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		assert_ok!(ValidatorSet::register_as_candidate(Origin::signed(3)));
 		let addition = CandidateInfo { who: 3, deposit: 10 };
 		assert_eq!(ValidatorSet::candidates(), vec![addition]);
@@ -131,7 +131,7 @@ fn cannot_register_duplicate_candidate() {
 
 #[test]
 fn cannot_register_as_candidate_if_insufficient_fund() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		assert_eq!(Balances::free_balance(&3), 100);
 		assert_eq!(Balances::free_balance(&33), 0);
 
@@ -146,7 +146,7 @@ fn cannot_register_as_candidate_if_insufficient_fund() {
 
 #[test]
 fn register_as_candidate_successfully() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		assert_eq!(ValidatorSet::desired_candidates(), 2);
 		assert_eq!(ValidatorSet::candidacy_bond(), 10);
 		assert_eq!(ValidatorSet::candidates(), Vec::new());
@@ -167,7 +167,7 @@ fn register_as_candidate_successfully() {
 
 #[test]
 fn leave_intent() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		assert_ok!(ValidatorSet::register_as_candidate(Origin::signed(3)));
 		assert_eq!(Balances::free_balance(3), 90);
 
@@ -187,7 +187,7 @@ fn leave_intent() {
 
 #[test]
 fn authorship_event_handler() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		Balances::make_free_balance_be(&ValidatorSet::account_id(), 105);
 
 		assert_eq!(Balances::free_balance(4), 100);
@@ -206,7 +206,7 @@ fn authorship_event_handler() {
 
 #[test]
 fn session_management_works() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		initialize_to_block(1);
 
 		assert_eq!(SessionChangeBlock::get(), 0);
@@ -240,7 +240,7 @@ fn session_management_works() {
 
 #[test]
 fn kick_and_slash_mechanism() {
-	new_test_ext().execute_with(|| {
+	ExternalityBuilder::build().execute_with(|| {
 		<crate::SlashDestination<TestRuntime>>::put(5);
 
 		assert_ok!(ValidatorSet::register_as_candidate(Origin::signed(3)));

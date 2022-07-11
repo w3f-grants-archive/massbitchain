@@ -8,6 +8,7 @@ use frame_support::{
 use frame_system as system;
 use frame_system::EnsureSignedBy;
 use sp_core::{crypto::KeyTypeId, H256};
+use sp_io::TestExternalities;
 use sp_runtime::{
 	testing::{Header, UintAuthorityId},
 	traits::{BlakeTwo256, IdentityLookup, OpaqueKeys},
@@ -210,30 +211,36 @@ impl Config for TestRuntime {
 	type WeightInfo = ();
 }
 
-pub fn new_test_ext() -> sp_io::TestExternalities {
-	sp_tracing::try_init_simple();
-	let mut t = frame_system::GenesisConfig::default().build_storage::<TestRuntime>().unwrap();
-	let invulnerables = vec![1, 2];
+pub struct ExternalityBuilder;
 
-	let balances = vec![(1, 100), (2, 100), (3, 100), (4, 100), (5, 100)];
-	let keys = balances
-		.iter()
-		.map(|&(i, _)| (i, i, MockSessionKeys { aura: UintAuthorityId(i) }))
-		.collect::<Vec<_>>();
-	let validator_set = validator_set::GenesisConfig::<TestRuntime> {
-		desired_candidates: 2,
-		candidacy_bond: 10,
-		invulnerables,
-	};
-	let session = pallet_session::GenesisConfig::<TestRuntime> { keys };
-	pallet_balances::GenesisConfig::<TestRuntime> { balances }
-		.assimilate_storage(&mut t)
-		.unwrap();
-	// validator set must be initialized before session.
-	validator_set.assimilate_storage(&mut t).unwrap();
-	session.assimilate_storage(&mut t).unwrap();
+impl ExternalityBuilder {
+	pub fn build() -> TestExternalities {
+		let mut storage =
+			frame_system::GenesisConfig::default().build_storage::<TestRuntime>().unwrap();
 
-	t.into()
+		let invulnerables = vec![1, 2];
+
+		let balances = vec![(1, 100), (2, 100), (3, 100), (4, 100), (5, 100)];
+		let keys = balances
+			.iter()
+			.map(|&(i, _)| (i, i, MockSessionKeys { aura: UintAuthorityId(i) }))
+			.collect::<Vec<_>>();
+		let validator_set = validator_set::GenesisConfig::<TestRuntime> {
+			desired_candidates: 2,
+			candidacy_bond: 10,
+			invulnerables,
+		};
+		let session = pallet_session::GenesisConfig::<TestRuntime> { keys };
+		pallet_balances::GenesisConfig::<TestRuntime> { balances }
+			.assimilate_storage(&mut storage)
+			.unwrap();
+		// validator set must be initialized before session.
+		validator_set.assimilate_storage(&mut storage).unwrap();
+		session.assimilate_storage(&mut storage).unwrap();
+
+		let ext = TestExternalities::from(storage);
+		ext
+	}
 }
 
 pub fn initialize_to_block(n: u64) {
