@@ -94,6 +94,9 @@ fn make_genesis(
 		aura: AuraConfig { authorities: vec![] },
 		grandpa: GrandpaConfig { authorities: vec![] },
 		sudo: SudoConfig { key: Some(root_key) },
-		dapi: DapiConfig { regulators: initial_regulators.iter().map(|x| x.clone()).collect() },
+		dapi: DapiConfig {
+			regulators: initial_regulators.iter().map(|x| x.clone()).collect(),
+			chain_ids: vec!["eth.mainnet".as_bytes().into(), "dot.mainnet".as_bytes().into()],
+		},
 	}
 }

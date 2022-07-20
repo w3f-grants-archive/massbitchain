@@ -150,12 +150,13 @@ pub mod pallet {
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub regulators: Vec<T::AccountId>,
+		pub chain_ids: Vec<Vec<u8>>,
 	}
 
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self { regulators: Vec::new() }
+			Self { regulators: Vec::new(), chain_ids: Vec::new() }
 		}
 	}
 
@@ -165,6 +166,12 @@ pub mod pallet {
 			let regulators =
 				&self.regulators.iter().map(|r| r.clone()).collect::<BTreeSet<T::AccountId>>();
 			Regulators::<T>::put(&regulators);
+			let chain_ids = &self
+				.chain_ids
+				.iter()
+				.map(|c| c.clone().try_into().map_err(|_| Error::<T>::InvalidChainId).unwrap())
+				.collect::<BTreeSet<BoundedVec<u8, T::MaxChainIdLength>>>();
+			ChainIds::<T>::put(&chain_ids);
 		}
 	}
 
