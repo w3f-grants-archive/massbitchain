@@ -1,4 +1,16 @@
 //! dAPI Pallet
+//!
+//! - [`Config`]
+//!
+//! ## Overview
+//!
+//! Pallet that manages dAPI providers and consumers.
+//!
+//! The pallet responsibilities:
+//! 1. dAPI providers management (registration, operational check)
+//! 2. dAPI projects management (registration, payment, quota check)
+//! 3. Maintain a set of actors chosen by root or governance voting. These actors are responsible
+//! for monitoring dAPI providers and projects.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

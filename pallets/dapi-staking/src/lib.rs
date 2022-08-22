@@ -1,4 +1,45 @@
 //! dAPI Staking Pallet
+//!
+//! - [`Config`]
+//!
+//! ## Overview
+//!
+//! Pallet that implements dAPI staking protocol.
+//!
+//! Stakers can choose a provider and delegate it for rewards by locking their tokens. Providers
+//! will be rewards, based on the proportion of locked tokens. Stakers are also rewarded, based on
+//! the total amount they've locked (invariant of the providers they delegated).
+//!
+//! Rewards are accumulated throughout an **era** and when **era** finished, both operators and
+//! delegators can claim their rewards for that era. Rewards can be claimed even for eras which are
+//! older that the last one. Since rewards claiming isn't automated, both operators and delegators
+//! are responsible for claiming their own rewards.
+//!
+//! ## Interface
+//!
+//! ### Dispatch function
+//!
+//! - `set_blocks_per_era` - changes number of blocks per era configuration, can only be called by
+//!   root or governance
+//! - `provider_bond_more` - used by operators to stake more tokens to their own providers
+//! - `provider_bond_less` - used by operators to unstake tokens to their own providers
+//! - `delegate` - delegates a provider and locks stakers tokens into staking
+//! - `delegator_unstake` - removes delegation from the provider, starting the unbonding process for
+//!   the unstaked funds
+//! - `withdraw_unbonded` - withdraws all funds that have completed the unbonding period
+//! - `claim_provider` - claims operator reward for a single era
+//! - `claim_delegator` - claims delegator reward for a single era
+//! - `provider_withdraw_unregistered` - used by operators to withdraw their stake from unregistered
+//!   provider
+//! - `delegator_withdraw_unregistered` - used by delegators to withdraw their stake from
+//!   unregistered provider
+//!
+//! ### Other
+//!
+//! - `on_initialize` - part of `Hooks` trait, called per block to handle reward snapshots and era
+//!   advancement
+//! - `account_id` - returns pallet's account Id
+//! - `handle_imbalance` - used to deposit delegators and providers rewards into staking reward pool
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

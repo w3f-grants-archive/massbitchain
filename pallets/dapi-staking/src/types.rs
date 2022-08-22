@@ -313,8 +313,8 @@ where
 	}
 }
 
-#[derive(Default, Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
 /// The current era index and transition information
+#[derive(Default, Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub struct EraInfo<BlockNumber> {
 	/// Current era index
 	pub current: EraIndex,

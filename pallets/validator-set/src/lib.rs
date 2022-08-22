@@ -1,4 +1,27 @@
-//! Validator Set pallet.
+//! Validator Set Pallet.
+//!
+//! ## Overview
+//! Pallet that manages validators of a chain.
+//!
+//! This pallet allows addition and removal of authorities/validators. The pallet uses the Session
+//! pallet and implements related traits for session management. Currently it uses periodic session
+//! rotation provided by the session pallet to automatically rotate sessions.
+//!
+//! ## Implementation
+//!
+//! The final `Validators` are aggregated from two individual lists:
+//!
+//! 1. [`Invulnerables`]: a set of validators appointed by governance. These accounts will always be
+//! validators. 2. [`Candidates`]: these are *candidates* and may or not may be elected as a final
+//! validator.
+//!
+//! Candidates will not be allowed to get kicked or `leave_intent` if the total number of candidates
+//! fall below `MinCandidates`. This is for potential disaster recovery scenarios.
+//!
+//! ### Rewards
+//!
+//! The Validator Set pallet maintains an on-chain account (the "Pot"). In each block, the validator
+//! who authored it receives total value of the Pot and transaction fees within the block.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
