@@ -9,8 +9,8 @@
 //! The pallet responsibilities:
 //! 1. dAPI providers management (registration, operational check)
 //! 2. dAPI projects management (registration, payment, quota check)
-//! 3. Maintain a set of actors chosen by root or governance voting. These actors are responsible
-//! for monitoring dAPI providers and projects.
+//! 3. Maintain a set of actors chosen by root or through governance voting. These actors are
+//! responsible for monitoring dAPI providers and projects.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -189,6 +189,8 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Consumer register new dAPI project and be charged some tokens in exchange for requests
+		/// quota
 		#[pallet::weight(T::WeightInfo::register_project())]
 		pub fn register_project(
 			origin: OriginFor<T>,
@@ -218,6 +220,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Consumer deposit more fund to extend requests quota.
 		#[pallet::weight(T::WeightInfo::deposit_project())]
 		pub fn deposit_project(
 			origin: OriginFor<T>,
@@ -240,6 +243,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Regulator submit project's usage. This will disable project if the quota is excess.
 		#[pallet::weight((0, DispatchClass::Normal, Pays::No))]
 		pub fn submit_project_usage(
 			origin: OriginFor<T>,
@@ -256,6 +260,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Register new provider
 		#[pallet::weight((0, DispatchClass::Normal, Pays::No))]
 		pub fn register_provider(
 			origin: OriginFor<T>,
@@ -288,6 +293,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Operator stake some funds to his own provider
 		#[pallet::weight(T::WeightInfo::deposit_provider())]
 		pub fn deposit_provider(
 			origin: OriginFor<T>,
@@ -311,6 +317,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Operator unregister his own provider.
 		#[pallet::weight(T::WeightInfo::unregister_provider())]
 		pub fn unregister_provider(
 			origin: OriginFor<T>,
@@ -334,6 +341,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Fisherman report malfunction provider and unregister it from staking pool.
 		#[pallet::weight((0, DispatchClass::Normal, Pays::No))]
 		pub fn report_provider_offence(
 			origin: OriginFor<T>,
@@ -356,6 +364,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Add new regulator.
 		#[pallet::weight(T::WeightInfo::add_regulator())]
 		pub fn add_regulator(
 			origin: OriginFor<T>,
@@ -370,6 +379,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Remove regulator.
 		#[pallet::weight(T::WeightInfo::remove_regulator())]
 		pub fn remove_regulator(
 			origin: OriginFor<T>,
@@ -384,6 +394,8 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Register new chain Id. The format should be `chainName.networkName` (e.g.
+		/// "dot.mainnet", "eth.mainnet")
 		#[pallet::weight(T::WeightInfo::add_chain_id())]
 		pub fn add_chain_id(origin: OriginFor<T>, chain_id: Vec<u8>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -397,6 +409,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Remove chain Id.
 		#[pallet::weight(T::WeightInfo::remove_chain_id())]
 		pub fn remove_chain_id(
 			origin: OriginFor<T>,

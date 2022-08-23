@@ -280,6 +280,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Change the number of blocks per era config. The config is applied at next era.
 		#[pallet::weight(T::WeightInfo::set_blocks_per_era())]
 		pub fn set_blocks_per_era(origin: OriginFor<T>, new: u32) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -297,6 +298,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Operator stake some funds to his own provider
 		#[pallet::weight(T::WeightInfo::provider_bond_more())]
 		pub fn provider_bond_more(
 			origin: OriginFor<T>,
@@ -334,6 +336,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Operator unstake some funds from his own provider.
 		#[pallet::weight(T::WeightInfo::provider_bond_less())]
 		pub fn provider_bond_less(
 			origin: OriginFor<T>,
