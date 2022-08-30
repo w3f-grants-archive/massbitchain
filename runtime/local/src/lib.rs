@@ -47,6 +47,7 @@ pub use sp_runtime::BuildStorage;
 pub use pallet_block_reward;
 pub use pallet_dapi;
 pub use pallet_dapi_staking;
+pub use pallet_fisherman;
 pub use pallet_validator_set;
 
 /// Constant values used within the runtime.
@@ -298,6 +299,7 @@ impl OnUnbalanced<NegativeImbalance> for DealWithFees {
 }
 
 impl pallet_transaction_payment::Config for Runtime {
+	type Event = Event;
 	type OnChargeTransaction = CurrencyAdapter<Balances, DealWithFees>;
 	type OperationalFeeMultiplier = OperationalFeeMultiplier;
 	type WeightToFee = WeightToFee;
@@ -526,6 +528,18 @@ impl pallet_dapi::Config for Runtime {
 	type WeightInfo = pallet_dapi::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const UnsignedPriority: u64 = 1 << 20;
+}
+
+impl pallet_fisherman::Config for Runtime {
+	type AuthorityId = pallet_fisherman::crypto::TestAuthId;
+	type Event = Event;
+	type Call = Call;
+	type UnixTime = Timestamp;
+	type UnsignedPriority = UnsignedPriority;
+}
+
 construct_runtime!(
 	pub enum Runtime where
 		Block = Block,
@@ -541,12 +555,13 @@ construct_runtime!(
 		Aura: pallet_aura::{Pallet, Config<T>},
 		Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
+		TransactionPayment: pallet_transaction_payment::{Pallet, Storage, Event<T>},
 		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
 		Utility: pallet_utility::{Pallet, Call, Event},
 		Dapi: pallet_dapi::{Pallet, Call, Storage, Config<T>, Event<T>},
 		DapiStaking: pallet_dapi_staking::{Pallet, Call, Storage, Event<T>},
 		BlockReward: pallet_block_reward::{Pallet, Call, Storage, Config, Event<T>},
+		Fisherman: pallet_fisherman::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
 	}
 );
 

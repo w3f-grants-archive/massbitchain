@@ -12,6 +12,9 @@ pub use sc_rpc_api::DenyUnsafe;
 
 use crate::primitives::{AccountId, Balance, Block, Nonce};
 
+/// A type representing all RPC extensions.
+pub type RpcExtension = jsonrpsee::RpcModule<()>;
+
 /// Full client dependencies.
 pub struct FullDeps<C, P> {
 	/// The client instance to use.
@@ -38,11 +41,10 @@ where
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 	use substrate_frame_rpc_system::{System, SystemApiServer};
 
-	let mut module = RpcModule::new(());
+	let mut module = RpcExtension::new(());
 	let FullDeps { client, pool, deny_unsafe } = deps;
 
 	module.merge(System::new(client.clone(), pool.clone(), deny_unsafe).into_rpc())?;
-	module.merge(TransactionPayment::new(client).into_rpc())?;
-
+	module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 	Ok(module)
 }
