@@ -79,7 +79,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("massbit-local"),
 	impl_name: create_runtime_str!("massbit-local"),
 	authoring_version: 1,
-	spec_version: 1,
+	spec_version: 10,
 	impl_version: 1,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -320,6 +320,23 @@ impl pallet_utility::Config for Runtime {
 	type WeightInfo = ();
 }
 
+parameter_types! {
+	pub const FishermanMaxMembers: u32 = 100;
+}
+
+impl pallet_membership::Config<pallet_membership::Instance1> for Runtime {
+	type Event = Event;
+	type AddOrigin = EnsureRoot<AccountId>;
+	type RemoveOrigin = EnsureRoot<AccountId>;
+	type SwapOrigin = EnsureRoot<AccountId>;
+	type ResetOrigin = EnsureRoot<AccountId>;
+	type PrimeOrigin = EnsureRoot<AccountId>;
+	type MembershipInitialized = ();
+	type MembershipChanged = ();
+	type MaxMembers = FishermanMaxMembers;
+	type WeightInfo = pallet_membership::weights::SubstrateWeight<Runtime>;
+}
+
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
 where
 	Call: From<LocalCall>,
@@ -528,16 +545,12 @@ impl pallet_dapi::Config for Runtime {
 	type WeightInfo = pallet_dapi::weights::SubstrateWeight<Runtime>;
 }
 
-parameter_types! {
-	pub const UnsignedPriority: u64 = 1 << 20;
-}
-
 impl pallet_fisherman::Config for Runtime {
 	type AuthorityId = pallet_fisherman::crypto::TestAuthId;
 	type Event = Event;
 	type Call = Call;
 	type UnixTime = Timestamp;
-	type UnsignedPriority = UnsignedPriority;
+	type Members = FishermanMembership;
 }
 
 construct_runtime!(
@@ -561,7 +574,8 @@ construct_runtime!(
 		Dapi: pallet_dapi::{Pallet, Call, Storage, Config<T>, Event<T>},
 		DapiStaking: pallet_dapi_staking::{Pallet, Call, Storage, Event<T>},
 		BlockReward: pallet_block_reward::{Pallet, Call, Storage, Config, Event<T>},
-		Fisherman: pallet_fisherman::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
+		FishermanMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>},
+		Fisherman: pallet_fisherman::{Pallet, Call, Storage, Event<T>},
 	}
 );
 

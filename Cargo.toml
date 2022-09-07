@@ -5,14 +5,14 @@ members = [
 	"pallets/block-reward",
 	"pallets/dapi",
 	"pallets/dapi-staking",
-	"pallets/validator-set",
 	"pallets/fisherman",
+	"pallets/validator-set",
 	"runtime/keiko",
 	"runtime/local",
 ]
-[profile.release]
-panic = "unwind"
 
 [patch.crates-io]
 orml-traits = { git = "https://github.com/open-web3-stack/open-runtime-module-library", rev = "8c625a5ab43c1c56cdeed5f8d814a891566d4cf8" }
 orml-utilities = { git = "https://github.com/open-web3-stack/open-runtime-module-library", rev = "8c625a5ab43c1c56cdeed5f8d814a891566d4cf8" }
+[profile.release]
+panic = "unwind"

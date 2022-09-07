@@ -5,56 +5,36 @@ use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	log,
 	pallet_prelude::*,
-	traits::{ChangeMembers, Currency, EstimateCallFee, Get, SortedMembers, UnixTime},
-	IterableStorageDoubleMap, IterableStorageMap,
+	traits::{SortedMembers, UnixTime},
+	IterableStorageMap,
 };
 use frame_system::{
 	self as system,
-	offchain::{
-		AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer, SubmitTransaction,
-	},
+	offchain::{AppCrypto, CreateSignedTransaction, ForAll, SendSignedTransaction, Signer},
 	pallet_prelude::*,
-	Config as SystemConfig,
 };
-use hex::ToHex;
-use lite_json::{
-	json::{JsonValue, NumberValue},
-	Serialize as JsonSerialize,
-};
-use orml_utilities::OrderedSet;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Deserializer, Serialize};
 use sp_core::crypto::KeyTypeId;
-use sp_runtime::{
-	offchain::{
-		http,
-		storage::{MutateStorageError, StorageRetrievalError, StorageValueRef},
-		Duration,
-	},
-	traits::{Hash, UniqueSaturatedInto, Zero},
-};
-use sp_std::{
-	borrow::ToOwned,
-	convert::{TryFrom, TryInto},
-	prelude::*,
-	str, vec,
-	vec::Vec,
-};
+use sp_runtime::offchain::{http, Duration};
+use sp_std::{convert::TryInto, prelude::*, str, vec, vec::Vec};
 
 pub use pallet::*;
 
+#[cfg(test)]
+mod tests;
+
 /// Defines application identifier for crypto keys of this module.
 ///
-/// Every module that deals with signatures needs to declare its unique identifier for
-/// its crypto keys.
-/// When offchain worker is signing transactions it's going to request keys of type
-/// `KeyTypeId` from the keystore and use the ones it finds to sign the transaction.
-/// The keys can be inserted manually via RPC (see `author_insertKey`).
+/// Every module that deals with signatures needs to declare its unique identifier for its crypto
+/// keys. When offchain worker is signing transactions it's going to request keys of type
+/// `KeyTypeId` from the keystore and use the ones it finds to sign the transaction. The keys can be
+/// inserted manually via RPC (see `author_insertKey`).
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ocwr");
 
-/// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrappers.
-/// We can use from supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
-/// the types with this pallet-specific identifier.
+/// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrappers. We
+/// can use from supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment the types
+/// with this pallet-specific identifier.
 pub mod crypto {
 	use super::KEY_TYPE;
 	use sp_core::sr25519::Signature as Sr25519Signature;
@@ -86,6 +66,8 @@ pub mod crypto {
 pub mod pallet {
 	use super::*;
 
+	pub type JobId = Vec<u8>;
+
 	#[pallet::pallet]
 	#[pallet::generate_store(trait Store)]
 	#[pallet::without_storage_info]
@@ -104,29 +86,22 @@ pub mod pallet {
 
 		type UnixTime: UnixTime;
 
-		/// A configuration for base priority of unsigned transactions.
-		///
-		/// This is exposed so that it can be tuned for particular runtime, when
-		/// multiple pallets send unsigned transactions.
-		#[pallet::constant]
-		type UnsignedPriority: Get<TransactionPriority>;
+		/// Fisherman membership.
+		type Members: SortedMembers<Self::AccountId>;
 	}
 
 	#[pallet::storage]
 	#[pallet::getter(fn jobs)]
-	pub type Jobs<T: Config> =
-		StorageMap<_, Blake2_128Concat, Vec<u8>, Job<T::AccountId>, OptionQuery>;
+	pub type Jobs<T: Config> = StorageMap<_, Blake2_128Concat, JobId, Job, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn job_results)]
-	pub type JobResults<T: Config> =
-		StorageMap<_, Blake2_128Concat, Vec<u8>, JobResult, OptionQuery>;
+	pub type JobResults<T: Config> = StorageMap<_, Blake2_128Concat, JobId, JobResult, OptionQuery>;
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// Job does not exist
 		JobNotExist,
-		/// DataRequest Fields is too large to store on-chain.
-		TooLarge,
 		/// Sender does not have permission
 		NoPermission,
 	}
@@ -134,15 +109,12 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// New job is submitted.
-		NewJob {
-			operator: T::AccountId,
-			job: Job<T::AccountId>,
-		},
-		NewJobResult {
-			job: Job<T::AccountId>,
-			job_result: JobResult,
-		},
+		/// New job is created.
+		NewJob { submitter: T::AccountId, job_id: JobId },
+		/// New job result is submitted by operators.
+		NewJobResult { job_id: JobId, job: Job, job_result: JobResult },
+		/// Job is removed.
+		JobRemoved { job_id: JobId },
 	}
 
 	#[pallet::hooks]
@@ -155,27 +127,9 @@ pub mod pallet {
 			let parent_hash = <system::Pallet<T>>::block_hash(block_number - 1u32.into());
 			log::debug!("Current block: {:?} (parent hash: {:?})", block_number, parent_hash);
 
-			let res = Self::fetch_data_and_send_raw_unsigned(block_number);
+			let res = Self::execute_jobs(block_number);
 			if let Err(e) = res {
 				log::error!("Error: {}", e);
-			}
-		}
-	}
-
-	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T> {
-		type Call = Call<T>;
-
-		/// Validate unsigned call to this module.
-		///
-		/// By default unsigned transactions are disallowed, but implementing the validator here we
-		/// make sure that some particular calls (the ones produced by offchain worker) are being
-		/// whitelisted and marked as valid.
-		fn validate_unsigned(source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-			if let Call::submit_job_result { .. } = call {
-				Self::validate_transaction()
-			} else {
-				InvalidTransaction::Call.into()
 			}
 		}
 	}
@@ -186,9 +140,8 @@ pub mod pallet {
 		pub fn create_job(
 			origin: OriginFor<T>,
 			plan_id: Vec<u8>,
-			job_id: Vec<u8>,
+			job_id: JobId,
 			job_name: Vec<u8>,
-			worker_id: T::AccountId,
 			provider_id: Vec<u8>,
 			provider_type: Vec<u8>,
 			phase: Vec<u8>,
@@ -198,14 +151,15 @@ pub mod pallet {
 			response_values: Vec<u8>,
 			url: Vec<u8>,
 			method: ApiMethod,
-			payload: Option<Vec<u8>>,
+			headers: Vec<(Vec<u8>, Vec<u8>)>,
+			payload: Vec<u8>,
 		) -> DispatchResultWithPostInfo {
-			let operator = ensure_signed(origin)?;
-			// ensure!(T::Members::contains(&operator), Error::<T>::NoPermission);
+			let submitter = ensure_signed(origin)?;
+			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
+
 			let job = Job {
 				plan_id,
 				job_name,
-				worker_id,
 				provider_id,
 				provider_type,
 				phase,
@@ -215,10 +169,11 @@ pub mod pallet {
 				response_values,
 				url,
 				method,
+				headers,
 				payload,
 			};
 			Jobs::<T>::insert(&job_id, job.clone());
-			Self::deposit_event(Event::NewJob { operator, job });
+			Self::deposit_event(Event::NewJob { submitter, job_id });
 			Ok(Pays::No.into())
 		}
 
@@ -227,16 +182,38 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			job_id: Vec<u8>,
 			result: Vec<u8>,
+			is_success: bool,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
+			let submitter = ensure_signed(origin)?;
+			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
 
 			let job = Jobs::<T>::get(&job_id).ok_or(Error::<T>::JobNotExist)?;
-
 			let now = T::UnixTime::now().as_millis();
-			let job_result = JobResult { result, timestamp: now };
+			let job_result = JobResult { result, timestamp: now, is_success };
 			JobResults::<T>::insert(&job_id, job_result.clone());
 
-			Self::deposit_event(Event::NewJobResult { job, job_result });
+			Self::deposit_event(Event::NewJobResult { job_id, job, job_result });
+			Ok(Pays::No.into())
+		}
+
+		#[pallet::weight(10_000)]
+		pub fn clear_job(origin: OriginFor<T>, job_id: Vec<u8>) -> DispatchResultWithPostInfo {
+			let submitter = ensure_signed(origin)?;
+			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
+
+			let job_exists = Jobs::<T>::contains_key(&job_id);
+			if job_exists {
+				<Jobs<T>>::remove(&job_id);
+				Self::deposit_event(Event::JobRemoved { job_id });
+			}
+			Ok(Pays::No.into())
+		}
+
+		/// TODO: Remove this
+		#[pallet::weight(10_000)]
+		pub fn clear_all_jobs(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			let _ = ensure_root(origin)?;
+			let _ = <Jobs<T>>::clear(1000, None);
 			Ok(Pays::No.into())
 		}
 	}
@@ -244,10 +221,9 @@ pub mod pallet {
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct Job<AccountId> {
+pub struct Job {
 	plan_id: Vec<u8>,
 	job_name: Vec<u8>,
-	worker_id: AccountId,
 	provider_id: Vec<u8>,
 	provider_type: Vec<u8>,
 	phase: Vec<u8>,
@@ -257,7 +233,8 @@ pub struct Job<AccountId> {
 	response_values: Vec<u8>,
 	url: Vec<u8>,
 	method: ApiMethod,
-	payload: Option<Vec<u8>>,
+	headers: Vec<(Vec<u8>, Vec<u8>)>,
+	payload: Vec<u8>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -272,6 +249,7 @@ pub enum ApiMethod {
 pub struct JobResult {
 	result: Vec<u8>,
 	timestamp: u128,
+	is_success: bool,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
@@ -296,47 +274,76 @@ where
 }
 
 impl<T: Config> Pallet<T> {
-	fn fetch_data_and_send_raw_unsigned(block_number: T::BlockNumber) -> Result<(), &'static str> {
+	fn execute_jobs(_block_number: T::BlockNumber) -> Result<(), &'static str> {
+		let signer = Signer::<T, T::AuthorityId>::all_accounts();
+		if !signer.can_sign() {
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)?
+		}
+
 		for (job_id, job) in <Jobs<T> as IterableStorageMap<_, _>>::iter() {
-			let mut response = vec![];
+			let response: Vec<u8>;
+			let mut is_success = true;
 			match job.method {
 				ApiMethod::Get => {
-					response = Self::send_http_get_request(job.url.clone())
-						.unwrap_or("Failed to send request".as_bytes().to_vec());
+					response = Self::send_http_get_request(job.url.clone()).unwrap_or_else(|_| {
+						is_success = false;
+						"Failed to send request".as_bytes().to_vec()
+					});
 				},
 				ApiMethod::Post => {
 					response = Self::send_http_post_request(
 						job.url.clone(),
-						job.payload.clone().unwrap_or_default(),
+						job.headers.clone(),
+						job.payload.clone(),
 					)
-					.unwrap_or("Failed to send request".as_bytes().to_vec());
+					.unwrap_or_else(|_| {
+						is_success = false;
+						"Failed to send request".as_bytes().to_vec()
+					});
 				},
 			}
 
-			match str::from_utf8(&job.job_name.clone()) {
+			if !is_success {
+				Self::send_job_result(&signer, &job_id, &response, is_success);
+				return Ok(())
+			}
+
+			match str::from_utf8(&job.job_name) {
 				Ok("LatestBlock") => {
 					let res: LatestBlockResponse = serde_json::from_slice(&response)
 						.expect("Response JSON was not well-formatted");
 					let data = serde_json::to_vec(&res.result).unwrap();
-					let result = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
-						Call::submit_job_result { job_id, result: data }.into(),
-					);
-					if let Err(e) = result {
-						log::error!("Error submitting unsigned transaction: {:?}", e);
-					}
+					Self::send_job_result(&signer, &job_id, &data, is_success);
 				},
 				Ok("RoundTripTime") => {
-					let result = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
-						Call::submit_job_result { job_id, result: response }.into(),
-					);
-					if let Err(e) = result {
-						log::error!("Error submitting unsigned transaction: {:?}", e);
-					}
+					log::info!("{}", str::from_utf8(&response).unwrap());
+					Self::send_job_result(&signer, &job_id, &response, is_success);
 				},
 				_ => (),
 			}
 		}
 		Ok(())
+	}
+
+	fn send_job_result(
+		signer: &Signer<T, <T as Config>::AuthorityId, ForAll>,
+		job_id: &Vec<u8>,
+		result: &Vec<u8>,
+		is_success: bool,
+	) {
+		let results = signer.send_signed_transaction(|_account| Call::submit_job_result {
+			job_id: job_id.clone(),
+			result: result.clone(),
+			is_success,
+		});
+		for (acc, res) in &results {
+			match res {
+				Ok(()) => log::info!("[{:?}] Submitted data", acc.id),
+				Err(e) => log::error!("[{:?}] Failed to submit transaction: {:?}", acc.id, e),
+			}
+		}
 	}
 
 	fn send_http_get_request(url: Vec<u8>) -> Result<Vec<u8>, http::Error> {
@@ -358,10 +365,18 @@ impl<T: Config> Pallet<T> {
 		Ok(body_str.as_bytes().to_vec())
 	}
 
-	fn send_http_post_request(url: Vec<u8>, payload: Vec<u8>) -> Result<Vec<u8>, http::Error> {
+	fn send_http_post_request(
+		url: Vec<u8>,
+		headers: Vec<(Vec<u8>, Vec<u8>)>,
+		payload: Vec<u8>,
+	) -> Result<Vec<u8>, http::Error> {
 		let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
-		let request = http::Request::post(str::from_utf8(&url).unwrap(), vec![payload.clone()])
-			.add_header("content-type", "application/json");
+		let mut request = http::Request::post(str::from_utf8(&url).unwrap(), vec![payload.clone()]);
+		for (key, val) in headers.iter() {
+			let key_str = sp_std::str::from_utf8(&key).unwrap_or_default();
+			let val_str = sp_std::str::from_utf8(&val).unwrap_or_default();
+			request = request.add_header(key_str, val_str);
+		}
 		let pending = request.deadline(deadline).send().map_err(|_| http::Error::IoError)?;
 		let response = pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 		if response.code != 200 {
@@ -376,13 +391,5 @@ impl<T: Config> Pallet<T> {
 		})?;
 
 		Ok(body_str.as_bytes().to_vec())
-	}
-
-	fn validate_transaction() -> TransactionValidity {
-		ValidTransaction::with_tag_prefix("MassbitOCW")
-			.priority(T::UnsignedPriority::get())
-			.longevity(5)
-			.propagate(true)
-			.build()
 	}
 }

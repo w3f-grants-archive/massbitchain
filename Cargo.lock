@@ -3830,6 +3830,7 @@ dependencies = [
  "pallet-fisherman",
  "pallet-grandpa",
  "pallet-identity",
+ "pallet-membership",
  "pallet-session",
  "pallet-sudo",
  "pallet-timestamp",
@@ -4904,6 +4905,7 @@ dependencies = [
  "orml-traits",
  "orml-utilities",
  "pallet-balances",
+ "pallet-membership",
  "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
@@ -4912,6 +4914,7 @@ dependencies = [
  "sp-arithmetic",
  "sp-core",
  "sp-io",
+ "sp-keystore",
  "sp-runtime",
  "sp-std",
 ]
