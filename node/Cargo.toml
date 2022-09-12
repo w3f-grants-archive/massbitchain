@@ -32,6 +32,7 @@ sp-consensus = { git = "https://github.com/paritytech/substrate.git", branch = "
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
 sp-core = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
 sp-finality-grandpa = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
 sp-offchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
 sp-runtime = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
 sp-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
@@ -62,6 +63,7 @@ build-script-utils = { package = "substrate-build-script-utils", git = "https://
 
 [features]
 default = []
+ocw = []
 runtime-benchmarks = [
 	"frame-benchmarking",
 	"frame-benchmarking-cli",

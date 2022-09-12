@@ -3965,6 +3965,7 @@ dependencies = [
  "sp-consensus-aura",
  "sp-core",
  "sp-finality-grandpa",
+ "sp-keystore",
  "sp-offchain",
  "sp-runtime",
  "sp-session",

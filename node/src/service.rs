@@ -265,6 +265,14 @@ where
 		})?;
 
 	if config.offchain_worker.enabled {
+		let keystore = keystore_container.sync_keystore();
+		sp_keystore::SyncCryptoStore::sr25519_generate_new(
+			&*keystore,
+			local_runtime::pallet_fisherman::KEY_TYPE,
+			Some("//Alice"),
+		)
+		.expect("Creating key with account Alice should succeed.");
+
 		sc_service::build_offchain_workers(
 			&config,
 			task_manager.spawn_handle(),

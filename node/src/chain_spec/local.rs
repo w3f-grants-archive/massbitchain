@@ -2,8 +2,8 @@
 
 use local_runtime::{
 	pallet_block_reward, wasm_binary_unwrap, AccountId, AuraConfig, BalancesConfig,
-	BlockRewardConfig, DapiConfig, GenesisConfig, GrandpaConfig, SessionConfig, SessionKeys,
-	SudoConfig, SystemConfig, ValidatorSetConfig, MBTL,
+	BlockRewardConfig, DapiConfig, FishermanMembershipConfig, GenesisConfig, GrandpaConfig,
+	SessionConfig, SessionKeys, SudoConfig, SystemConfig, ValidatorSetConfig, MBTL,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -93,10 +93,14 @@ fn make_genesis(
 		},
 		aura: AuraConfig { authorities: vec![] },
 		grandpa: GrandpaConfig { authorities: vec![] },
-		sudo: SudoConfig { key: Some(root_key) },
+		sudo: SudoConfig { key: Some(root_key.clone()) },
 		dapi: DapiConfig {
 			regulators: initial_regulators.iter().map(|x| x.clone()).collect(),
 			chain_ids: vec!["eth.mainnet".as_bytes().into(), "dot.mainnet".as_bytes().into()],
+		},
+		fisherman_membership: FishermanMembershipConfig {
+			members: vec![root_key].try_into().expect("convert error!"),
+			phantom: Default::default(),
 		},
 	}
 }

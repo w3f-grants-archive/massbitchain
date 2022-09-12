@@ -574,7 +574,7 @@ construct_runtime!(
 		Dapi: pallet_dapi::{Pallet, Call, Storage, Config<T>, Event<T>},
 		DapiStaking: pallet_dapi_staking::{Pallet, Call, Storage, Event<T>},
 		BlockReward: pallet_block_reward::{Pallet, Call, Storage, Config, Event<T>},
-		FishermanMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>},
+		FishermanMembership: pallet_membership::<Instance1>,
 		Fisherman: pallet_fisherman::{Pallet, Call, Storage, Event<T>},
 	}
 );
