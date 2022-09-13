@@ -48,6 +48,10 @@ pub fn development_config() -> ChainSpec {
 				],
 				vec![authority_keys_from_seed("Alice")],
 				vec![
+					get_account_id_from_seed::<sr25519::Public>("Charlie"),
+					get_account_id_from_seed::<sr25519::Public>("Dave"),
+				],
+				vec![
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
 				],
@@ -67,6 +71,7 @@ fn make_genesis(
 	endowed_accounts: Vec<AccountId>,
 	initial_authorities: Vec<(AccountId, AuraId, GrandpaId)>,
 	initial_regulators: Vec<AccountId>,
+	initial_fishermen: Vec<AccountId>,
 ) -> GenesisConfig {
 	GenesisConfig {
 		system: SystemConfig { code: wasm_binary_unwrap().to_vec() },
@@ -99,7 +104,7 @@ fn make_genesis(
 			chain_ids: vec!["eth.mainnet".as_bytes().into(), "dot.mainnet".as_bytes().into()],
 		},
 		fisherman_membership: FishermanMembershipConfig {
-			members: vec![root_key].try_into().expect("convert error!"),
+			members: initial_fishermen.try_into().expect("convert error!"),
 			phantom: Default::default(),
 		},
 	}
