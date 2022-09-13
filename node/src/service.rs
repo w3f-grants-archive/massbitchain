@@ -269,7 +269,14 @@ where
 		sp_keystore::SyncCryptoStore::sr25519_generate_new(
 			&*keystore,
 			local_runtime::pallet_fisherman::KEY_TYPE,
-			Some("//Alice"),
+			Some("//Charlie"),
+		)
+		.expect("Creating key with account Alice should succeed.");
+
+		sp_keystore::SyncCryptoStore::sr25519_generate_new(
+			&*keystore,
+			local_runtime::pallet_fisherman::KEY_TYPE,
+			Some("//Dave"),
 		)
 		.expect("Creating key with account Alice should succeed.");
 

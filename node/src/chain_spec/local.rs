@@ -48,12 +48,12 @@ pub fn development_config() -> ChainSpec {
 				],
 				vec![authority_keys_from_seed("Alice")],
 				vec![
-					get_account_id_from_seed::<sr25519::Public>("Charlie"),
-					get_account_id_from_seed::<sr25519::Public>("Dave"),
-				],
-				vec![
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
+				],
+				vec![
+					get_account_id_from_seed::<sr25519::Public>("Charlie"),
+					get_account_id_from_seed::<sr25519::Public>("Dave"),
 				],
 			)
 		},
