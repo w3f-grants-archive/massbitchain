@@ -311,7 +311,7 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if !is_success {
-				Self::send_job_result(&signer, &job.job_id, &response, is_success);
+				Self::send_job_result(&signer, &provider_id, &response, is_success);
 				return Ok(())
 			}
 
