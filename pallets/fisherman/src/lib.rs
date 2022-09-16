@@ -91,8 +91,8 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	#[pallet::getter(fn jobs)]
-	pub type Jobs<T: Config> = StorageMap<_, Blake2_128Concat, JobId, Job, OptionQuery>;
+	#[pallet::getter(fn provider_jobs)]
+	pub type ProviderJobs<T: Config> = StorageMap<_, Blake2_128Concat, Vec<u8>, Job, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn job_results)]
@@ -104,17 +104,19 @@ pub mod pallet {
 		JobNotExist,
 		/// Sender does not have permission
 		NoPermission,
+		/// Provider already have jobs
+		ProviderJobExists,
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// New job is created.
-		NewJob { submitter: T::AccountId, job_id: JobId },
+		NewJob { submitter: T::AccountId, provider_id: Vec<u8>, job_id: JobId },
 		/// New job result is submitted by operators.
-		NewJobResult { job_id: JobId, job: Job, job_result: JobResult },
+		NewJobResult { job: Job, job_result: JobResult },
 		/// Job is removed.
-		JobRemoved { job_id: JobId },
+		JobRemoved { provider_id: Vec<u8> },
 	}
 
 	#[pallet::hooks]
@@ -156,11 +158,13 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let submitter = ensure_signed(origin)?;
 			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
+			ensure!(!ProviderJobs::<T>::contains_key(&provider_id), Error::<T>::ProviderJobExists);
 
 			let job = Job {
+				job_id: job_id.clone(),
 				plan_id,
 				job_name,
-				provider_id,
+				provider_id: provider_id.clone(),
 				provider_type,
 				phase,
 				chain,
@@ -172,39 +176,39 @@ pub mod pallet {
 				headers,
 				payload,
 			};
-			Jobs::<T>::insert(&job_id, job.clone());
-			Self::deposit_event(Event::NewJob { submitter, job_id });
+			ProviderJobs::<T>::insert(&provider_id, job);
+			Self::deposit_event(Event::NewJob { submitter, provider_id, job_id });
 			Ok(Pays::No.into())
 		}
 
 		#[pallet::weight(10_000)]
 		pub fn submit_job_result(
 			origin: OriginFor<T>,
-			job_id: Vec<u8>,
+			provider_id: Vec<u8>,
 			result: Vec<u8>,
 			is_success: bool,
 		) -> DispatchResultWithPostInfo {
 			let submitter = ensure_signed(origin)?;
 			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
 
-			let job = Jobs::<T>::get(&job_id).ok_or(Error::<T>::JobNotExist)?;
+			let job = ProviderJobs::<T>::get(&provider_id).ok_or(Error::<T>::JobNotExist)?;
 			let now = T::UnixTime::now().as_millis();
 			let job_result = JobResult { result, timestamp: now, is_success };
-			JobResults::<T>::insert(&job_id, job_result.clone());
+			JobResults::<T>::insert(&job.job_id, job_result.clone());
 
-			Self::deposit_event(Event::NewJobResult { job_id, job, job_result });
+			Self::deposit_event(Event::NewJobResult { job, job_result });
 			Ok(Pays::No.into())
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn clear_job(origin: OriginFor<T>, job_id: Vec<u8>) -> DispatchResultWithPostInfo {
+		pub fn clear_job(origin: OriginFor<T>, provider_id: Vec<u8>) -> DispatchResultWithPostInfo {
 			let submitter = ensure_signed(origin)?;
 			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
 
-			let job_exists = Jobs::<T>::contains_key(&job_id);
+			let job_exists = ProviderJobs::<T>::contains_key(&provider_id);
 			if job_exists {
-				<Jobs<T>>::remove(&job_id);
-				Self::deposit_event(Event::JobRemoved { job_id });
+				<ProviderJobs<T>>::remove(&provider_id);
+				Self::deposit_event(Event::JobRemoved { provider_id });
 			}
 			Ok(Pays::No.into())
 		}
@@ -213,7 +217,7 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn clear_all_jobs(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let _ = ensure_root(origin)?;
-			let _ = <Jobs<T>>::clear(1000, None);
+			let _ = <ProviderJobs<T>>::clear(1000, None);
 			Ok(Pays::No.into())
 		}
 	}
@@ -222,6 +226,7 @@ pub mod pallet {
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Job {
+	job_id: Vec<u8>,
 	plan_id: Vec<u8>,
 	job_name: Vec<u8>,
 	provider_id: Vec<u8>,
@@ -282,7 +287,7 @@ impl<T: Config> Pallet<T> {
 			)?
 		}
 
-		for (job_id, job) in <Jobs<T> as IterableStorageMap<_, _>>::iter() {
+		for (provider_id, job) in <ProviderJobs<T> as IterableStorageMap<_, _>>::iter() {
 			let response: Vec<u8>;
 			let mut is_success = true;
 			match job.method {
@@ -306,7 +311,7 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if !is_success {
-				Self::send_job_result(&signer, &job_id, &response, is_success);
+				Self::send_job_result(&signer, &job.job_id, &response, is_success);
 				return Ok(())
 			}
 
@@ -315,11 +320,11 @@ impl<T: Config> Pallet<T> {
 					let res: LatestBlockResponse = serde_json::from_slice(&response)
 						.expect("Response JSON was not well-formatted");
 					let data = serde_json::to_vec(&res.result).unwrap();
-					Self::send_job_result(&signer, &job_id, &data, is_success);
+					Self::send_job_result(&signer, &provider_id, &data, is_success);
 				},
 				Ok("RoundTripTime") => {
 					log::info!("{}", str::from_utf8(&response).unwrap());
-					Self::send_job_result(&signer, &job_id, &response, is_success);
+					Self::send_job_result(&signer, &provider_id, &response, is_success);
 				},
 				_ => (),
 			}
@@ -329,12 +334,12 @@ impl<T: Config> Pallet<T> {
 
 	fn send_job_result(
 		signer: &Signer<T, <T as Config>::AuthorityId, ForAll>,
-		job_id: &Vec<u8>,
+		provider_id: &Vec<u8>,
 		result: &Vec<u8>,
 		is_success: bool,
 	) {
 		let results = signer.send_signed_transaction(|_account| Call::submit_job_result {
-			job_id: job_id.clone(),
+			provider_id: provider_id.clone(),
 			result: result.clone(),
 			is_success,
 		});
