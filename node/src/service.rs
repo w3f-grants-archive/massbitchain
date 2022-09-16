@@ -273,13 +273,6 @@ where
 		)
 		.expect("Creating key with account Alice should succeed.");
 
-		sp_keystore::SyncCryptoStore::sr25519_generate_new(
-			&*keystore,
-			local_runtime::pallet_fisherman::KEY_TYPE,
-			Some("//Dave"),
-		)
-		.expect("Creating key with account Alice should succeed.");
-
 		sc_service::build_offchain_workers(
 			&config,
 			task_manager.spawn_handle(),
