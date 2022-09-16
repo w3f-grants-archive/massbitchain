@@ -253,8 +253,7 @@ pub mod pallet {
 			let regulator = ensure_signed(origin)?;
 			ensure!(Self::regulators().contains(&regulator), Error::<T>::PermissionDenied);
 			let mut project = Projects::<T>::get(&project_id).ok_or(Error::<T>::ProjectDNE)?;
-			project.usage = project.usage.saturating_add(usage).min(project.quota);
-			let usage = project.usage;
+			project.usage = usage;
 			Projects::<T>::insert(&project_id, project);
 			Self::deposit_event(Event::ProjectUsageUpdated { project_id, usage });
 			Ok(().into())
