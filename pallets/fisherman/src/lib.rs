@@ -288,6 +288,8 @@ impl<T: Config> Pallet<T> {
 		}
 
 		for (provider_id, job) in <ProviderJobs<T> as IterableStorageMap<_, _>>::iter() {
+			let provider_id_str = str::from_utf8(&provider_id).unwrap();
+			log::info!("Execute job for provider {}", provider_id_str);
 			let response: Vec<u8>;
 			let mut is_success = true;
 			match job.method {
@@ -311,10 +313,12 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if !is_success {
+				log::info!("Submit failed job result for provider {}", provider_id_str);
 				Self::send_job_result(&signer, &provider_id, &response, is_success);
 				return Ok(())
 			}
 
+			log::info!("Submit success job result for provider {}", provider_id_str);
 			match str::from_utf8(&job.job_name) {
 				Ok("LatestBlock") => {
 					let res: LatestBlockResponse = serde_json::from_slice(&response)
