@@ -10,7 +10,10 @@ use frame_support::{
 };
 use frame_system::{
 	self as system,
-	offchain::{AppCrypto, CreateSignedTransaction, ForAll, SendSignedTransaction, Signer},
+	offchain::{
+		AppCrypto, CreateSignedTransaction, ForAll, SendSignedTransaction, Signer,
+		SubmitTransaction,
+	},
 	pallet_prelude::*,
 };
 use scale_info::TypeInfo;
@@ -88,6 +91,13 @@ pub mod pallet {
 
 		/// Fisherman membership.
 		type Members: SortedMembers<Self::AccountId>;
+
+		/// A configuration for base priority of unsigned transactions.
+		///
+		/// This is exposed so that it can be tuned for particular runtime, when
+		/// multiple pallets send unsigned transactions.
+		#[pallet::constant]
+		type UnsignedPriority: Get<TransactionPriority>;
 	}
 
 	#[pallet::storage]
@@ -132,6 +142,28 @@ pub mod pallet {
 			let res = Self::execute_jobs(block_number);
 			if let Err(e) = res {
 				log::error!("Error: {}", e);
+			}
+		}
+	}
+
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T> {
+		type Call = Call<T>;
+
+		/// Validate unsigned call to this module.
+		///
+		/// By default unsigned transactions are disallowed, but implementing the validator
+		/// here we make sure that some particular calls (the ones produced by offchain worker)
+		/// are being whitelisted and marked as valid.
+		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			if let Call::submit_job_result { .. } = call {
+				ValidTransaction::with_tag_prefix("MassbitOCW")
+					.priority(T::UnsignedPriority::get())
+					.longevity(5)
+					.propagate(true)
+					.build()
+			} else {
+				InvalidTransaction::Call.into()
 			}
 		}
 	}
@@ -188,8 +220,7 @@ pub mod pallet {
 			result: Vec<u8>,
 			is_success: bool,
 		) -> DispatchResultWithPostInfo {
-			let submitter = ensure_signed(origin)?;
-			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
+			ensure_none(origin.clone())?;
 
 			let job = ProviderJobs::<T>::get(&provider_id).ok_or(Error::<T>::JobNotExist)?;
 			let now = T::UnixTime::now().as_millis();
@@ -314,7 +345,7 @@ impl<T: Config> Pallet<T> {
 
 			if !is_success {
 				log::info!("Submit failed job result for provider {}", provider_id_str);
-				Self::send_job_result(&signer, &provider_id, &response, is_success);
+				Self::send_job_result(&provider_id, &response, is_success);
 				return Ok(())
 			}
 
@@ -324,11 +355,11 @@ impl<T: Config> Pallet<T> {
 					let res: LatestBlockResponse = serde_json::from_slice(&response)
 						.expect("Response JSON was not well-formatted");
 					let data = serde_json::to_vec(&res.result).unwrap();
-					Self::send_job_result(&signer, &provider_id, &data, is_success);
+					Self::send_job_result(&provider_id, &data, is_success);
 				},
 				Ok("RoundTripTime") => {
 					log::info!("{}", str::from_utf8(&response).unwrap());
-					Self::send_job_result(&signer, &provider_id, &response, is_success);
+					Self::send_job_result(&provider_id, &response, is_success);
 				},
 				_ => (),
 			}
@@ -336,22 +367,18 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
-	fn send_job_result(
-		signer: &Signer<T, <T as Config>::AuthorityId, ForAll>,
-		provider_id: &Vec<u8>,
-		result: &Vec<u8>,
-		is_success: bool,
-	) {
-		let results = signer.send_signed_transaction(|_account| Call::submit_job_result {
-			provider_id: provider_id.clone(),
-			result: result.clone(),
-			is_success,
-		});
-		for (acc, res) in &results {
-			match res {
-				Ok(()) => log::info!("[{:?}] Submitted data", acc.id),
-				Err(e) => log::error!("[{:?}] Failed to submit transaction: {:?}", acc.id, e),
+	fn send_job_result(provider_id: &Vec<u8>, result: &Vec<u8>, is_success: bool) {
+		let result = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+			Call::submit_job_result {
+				provider_id: provider_id.clone(),
+				result: result.clone(),
+				is_success,
 			}
+			.into(),
+		);
+
+		if let Err(e) = result {
+			log::error!("Error submitting unsigned transaction: {:?}", e);
 		}
 	}
 

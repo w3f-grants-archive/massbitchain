@@ -545,12 +545,17 @@ impl pallet_dapi::Config for Runtime {
 	type WeightInfo = pallet_dapi::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const UnsignedPriority: u64 = 1 << 20;
+}
+
 impl pallet_fisherman::Config for Runtime {
 	type AuthorityId = pallet_fisherman::crypto::TestAuthId;
 	type Event = Event;
 	type Call = Call;
 	type UnixTime = Timestamp;
 	type Members = FishermanMembership;
+	type UnsignedPriority = UnsignedPriority;
 }
 
 construct_runtime!(
@@ -575,7 +580,7 @@ construct_runtime!(
 		DapiStaking: pallet_dapi_staking::{Pallet, Call, Storage, Event<T>},
 		BlockReward: pallet_block_reward::{Pallet, Call, Storage, Config, Event<T>},
 		FishermanMembership: pallet_membership::<Instance1>,
-		Fisherman: pallet_fisherman::{Pallet, Call, Storage, Event<T>},
+		Fisherman: pallet_fisherman::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
 	}
 );
 
