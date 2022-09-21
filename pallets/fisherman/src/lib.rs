@@ -216,18 +216,19 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn submit_job_result(
 			origin: OriginFor<T>,
-			provider_id: Vec<u8>,
-			result: Vec<u8>,
-			is_success: bool,
+			results: Vec<(Vec<u8>, Vec<u8>, bool)>,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin.clone())?;
 
-			let job = ProviderJobs::<T>::get(&provider_id).ok_or(Error::<T>::JobNotExist)?;
-			let now = T::UnixTime::now().as_millis();
-			let job_result = JobResult { result, timestamp: now, is_success };
-			JobResults::<T>::insert(&job.job_id, job_result.clone());
+			for (provider_id, result, is_success) in results {
+				let job = ProviderJobs::<T>::get(&provider_id).ok_or(Error::<T>::JobNotExist)?;
+				let now = T::UnixTime::now().as_millis();
+				let job_result = JobResult { result, timestamp: now, is_success };
+				JobResults::<T>::insert(&job.job_id, job_result.clone());
 
-			Self::deposit_event(Event::NewJobResult { job, job_result });
+				Self::deposit_event(Event::NewJobResult { job, job_result });
+			}
+
 			Ok(Pays::No.into())
 		}
 
@@ -322,6 +323,7 @@ impl<T: Config> Pallet<T> {
 			)?
 		}
 
+		let mut results = Vec::<(Vec<u8>, Vec<u8>, bool)>::new();
 		for (provider_id, job) in <ProviderJobs<T> as IterableStorageMap<_, _>>::iter() {
 			let provider_id_str = str::from_utf8(&provider_id).unwrap();
 			log::info!("Execute job for provider {}", provider_id_str);
@@ -349,8 +351,8 @@ impl<T: Config> Pallet<T> {
 
 			if !is_success {
 				log::info!("Submit failed job result for provider {}", provider_id_str);
-				Self::send_job_result(&provider_id, &response, is_success);
-				return Ok(())
+				results.push((provider_id.clone(), response.clone(), is_success));
+				continue
 			}
 
 			log::info!("Submit success job result for provider {}", provider_id_str);
@@ -359,26 +361,26 @@ impl<T: Config> Pallet<T> {
 					let res: LatestBlockResponse = serde_json::from_slice(&response)
 						.expect("Response JSON was not well-formatted");
 					let data = serde_json::to_vec(&res.result).unwrap();
-					Self::send_job_result(&provider_id, &data, is_success);
+					results.push((provider_id.clone(), data.clone(), is_success));
 				},
 				Ok("RoundTripTime") => {
 					log::info!("{}", str::from_utf8(&response).unwrap());
-					Self::send_job_result(&provider_id, &response, is_success);
+					results.push((provider_id.clone(), response.clone(), is_success));
 				},
 				_ => (),
 			}
 		}
+
+		if results.iter().count() > 0 {
+			Self::send_job_result(results)
+		}
+
 		Ok(())
 	}
 
-	fn send_job_result(provider_id: &Vec<u8>, result: &Vec<u8>, is_success: bool) {
+	fn send_job_result(results: Vec<(Vec<u8>, Vec<u8>, bool)>) {
 		let result = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
-			Call::submit_job_result {
-				provider_id: provider_id.clone(),
-				result: result.clone(),
-				is_success,
-			}
-			.into(),
+			Call::submit_job_result { results }.into(),
 		);
 
 		if let Err(e) = result {
