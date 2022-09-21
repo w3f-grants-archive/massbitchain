@@ -310,7 +310,11 @@ where
 }
 
 impl<T: Config> Pallet<T> {
-	fn execute_jobs(_block_number: T::BlockNumber) -> Result<(), &'static str> {
+	fn execute_jobs(block_number: T::BlockNumber) -> Result<(), &'static str> {
+		if block_number % 3u32.into() != 0u32.into() {
+			return Ok(())
+		}
+
 		let signer = Signer::<T, T::AuthorityId>::all_accounts();
 		if !signer.can_sign() {
 			return Err(
