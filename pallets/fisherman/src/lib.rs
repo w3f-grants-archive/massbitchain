@@ -124,7 +124,7 @@ pub mod pallet {
 		/// New job is created.
 		NewJob { submitter: T::AccountId, provider_id: Vec<u8>, job_id: JobId },
 		/// New job result is submitted by operators.
-		NewJobResult { job: Job, job_result: JobResult },
+		NewJobResults { results: Vec<(Job, JobResult)> },
 		/// Job is removed.
 		JobRemoved { provider_id: Vec<u8> },
 	}
@@ -220,14 +220,16 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin.clone())?;
 
+			let mut event_results: Vec<(Job, JobResult)> = vec![];
 			for (provider_id, result, is_success) in results {
 				let job = ProviderJobs::<T>::get(&provider_id).ok_or(Error::<T>::JobNotExist)?;
 				let now = T::UnixTime::now().as_millis();
 				let job_result = JobResult { result, timestamp: now, is_success };
 				JobResults::<T>::insert(&job.job_id, job_result.clone());
-
-				Self::deposit_event(Event::NewJobResult { job, job_result });
+				event_results.push((job, job_result));
 			}
+
+			Self::deposit_event(Event::NewJobResults { results: event_results });
 
 			Ok(Pays::No.into())
 		}
