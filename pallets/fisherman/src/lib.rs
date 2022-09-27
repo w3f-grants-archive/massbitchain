@@ -88,13 +88,6 @@ pub mod pallet {
 
 		/// Fisherman membership.
 		type Members: SortedMembers<Self::AccountId>;
-
-		/// A configuration for base priority of unsigned transactions.
-		///
-		/// This is exposed so that it can be tuned for particular runtime, when
-		/// multiple pallets send unsigned transactions.
-		#[pallet::constant]
-		type UnsignedPriority: Get<TransactionPriority>;
 	}
 
 	#[pallet::storage]
@@ -145,6 +138,9 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Create new job.
+		///
+		/// Require authorized operator.
 		#[pallet::weight(10_000)]
 		pub fn create_job(
 			origin: OriginFor<T>,
@@ -188,6 +184,7 @@ pub mod pallet {
 			Ok(Pays::No.into())
 		}
 
+		/// Submit job results by offchain worker
 		#[pallet::weight(10_000)]
 		pub fn submit_job_result(
 			origin: OriginFor<T>,
@@ -210,6 +207,7 @@ pub mod pallet {
 			Ok(Pays::No.into())
 		}
 
+		/// Clear job, required authorized operator.
 		#[pallet::weight(10_000)]
 		pub fn clear_job(origin: OriginFor<T>, provider_id: Vec<u8>) -> DispatchResultWithPostInfo {
 			let submitter = ensure_signed(origin)?;
@@ -220,14 +218,6 @@ pub mod pallet {
 				<ProviderJobs<T>>::remove(&provider_id);
 				Self::deposit_event(Event::JobRemoved { provider_id });
 			}
-			Ok(Pays::No.into())
-		}
-
-		/// TODO: Remove this
-		#[pallet::weight(10_000)]
-		pub fn clear_all_jobs(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			let _ = ensure_root(origin)?;
-			let _ = <ProviderJobs<T>>::clear(1000, None);
 			Ok(Pays::No.into())
 		}
 	}

@@ -211,17 +211,15 @@ fn submit_job_result_successfully() {
 		)
 		.unwrap();
 
-		Fisherman::execute_jobs(1).unwrap();
+		Fisherman::execute_jobs(3).unwrap();
 
 		let tx = pool_state.write().transactions.pop().unwrap();
 		let tx = Extrinsic::decode(&mut &*tx).unwrap();
 		if let Call::Fisherman(crate::Call::submit_job_result {
-			job_id: _job_id,
-			result: _result,
-			is_success,
+			results,
 		}) = tx.call
 		{
-			assert!(is_success)
+			assert!(results[0].2)
 		}
 	});
 }
