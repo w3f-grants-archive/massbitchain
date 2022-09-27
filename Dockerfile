@@ -46,7 +46,7 @@ ENTRYPOINT ["bash","entrypoint.sh"]
 # COPY massbit-node /usr/local/bin
 # COPY entrypoint.sh .
 
-# EXPOSE 9944
+EXPOSE 9944
 # EXPOSE 9933
 
 # # Run the application

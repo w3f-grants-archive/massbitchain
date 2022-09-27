@@ -10,10 +10,7 @@ use frame_support::{
 };
 use frame_system::{
 	self as system,
-	offchain::{
-		AppCrypto, CreateSignedTransaction, ForAll, SendSignedTransaction, Signer,
-		SubmitTransaction,
-	},
+	offchain::{AppCrypto, CreateSignedTransaction, ForAll, SendSignedTransaction, Signer},
 	pallet_prelude::*,
 };
 use scale_info::TypeInfo;
@@ -146,28 +143,6 @@ pub mod pallet {
 		}
 	}
 
-	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T> {
-		type Call = Call<T>;
-
-		/// Validate unsigned call to this module.
-		///
-		/// By default unsigned transactions are disallowed, but implementing the validator
-		/// here we make sure that some particular calls (the ones produced by offchain worker)
-		/// are being whitelisted and marked as valid.
-		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-			if let Call::submit_job_result { .. } = call {
-				ValidTransaction::with_tag_prefix("MassbitOCW")
-					.priority(T::UnsignedPriority::get())
-					.longevity(5)
-					.propagate(true)
-					.build()
-			} else {
-				InvalidTransaction::Call.into()
-			}
-		}
-	}
-
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(10_000)]
@@ -218,7 +193,8 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			results: Vec<(Vec<u8>, Vec<u8>, bool)>,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin.clone())?;
+			let submitter = ensure_signed(origin)?;
+			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
 
 			let mut event_results: Vec<(Job, JobResult)> = vec![];
 			for (provider_id, result, is_success) in results {
@@ -374,19 +350,24 @@ impl<T: Config> Pallet<T> {
 		}
 
 		if results.iter().count() > 0 {
-			Self::send_job_result(results)
+			Self::send_job_result(&signer, results)
 		}
 
 		Ok(())
 	}
 
-	fn send_job_result(results: Vec<(Vec<u8>, Vec<u8>, bool)>) {
-		let result = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
-			Call::submit_job_result { results }.into(),
-		);
-
-		if let Err(e) = result {
-			log::error!("Error submitting unsigned transaction: {:?}", e);
+	fn send_job_result(
+		signer: &Signer<T, <T as Config>::AuthorityId, ForAll>,
+		results: Vec<(Vec<u8>, Vec<u8>, bool)>,
+	) {
+		let res = signer.send_signed_transaction(|_account| Call::submit_job_result {
+			results: results.clone(),
+		});
+		for (acc, r) in &res {
+			match r {
+				Ok(()) => log::info!("[{:?}] Submitted data", acc.id),
+				Err(e) => log::error!("[{:?}] Failed to submit transaction: {:?}", acc.id, e),
+			}
 		}
 	}
 
