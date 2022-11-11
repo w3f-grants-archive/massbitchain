@@ -705,7 +705,7 @@ pub mod pallet {
 
 			T::Currency::reserve(&account, bond)?;
 
-			ProviderInfo::<T>::insert(&provider_id, ProviderMetadata::new(account.clone()));
+			ProviderInfo::<T>::insert(&provider_id, ProviderMetadata::new(account));
 			let era = Self::current_era();
 			ProviderEraInfo::<T>::insert(
 				&provider_id,
@@ -780,7 +780,7 @@ pub mod pallet {
 			let mut state = <EraState<T>>::get(era).unwrap_or_default();
 			EraState::<T>::insert(
 				era + 1,
-				EraMetadata { rewards: Default::default(), staked: state.staked.clone() },
+				EraMetadata { rewards: Default::default(), staked: state.staked },
 			);
 			state.rewards = RewardAccumulator::<T>::take();
 			EraState::<T>::insert(era, state);

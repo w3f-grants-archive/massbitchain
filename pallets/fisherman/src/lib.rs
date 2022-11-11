@@ -1,3 +1,10 @@
+//! # Fisherman Pallet
+//!
+//! ## Overview
+//!
+//! Pallet that implements provider checking mechanics. When provider is sucessfully registered,
+//! authoritative fisherman submits jobs (checking provider healthiness, latest blocks for each
+//! blockchain). Jobs is executed per configured blocks and scheduled randomly between fishermen.
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode};
@@ -206,20 +213,6 @@ pub mod pallet {
 
 			Ok(Pays::No.into())
 		}
-
-		/// Clear job, required authorized operator.
-		#[pallet::weight(10_000)]
-		pub fn clear_job(origin: OriginFor<T>, provider_id: Vec<u8>) -> DispatchResultWithPostInfo {
-			let submitter = ensure_signed(origin)?;
-			ensure!(T::Members::contains(&submitter), Error::<T>::NoPermission);
-
-			let job_exists = ProviderJobs::<T>::contains_key(&provider_id);
-			if job_exists {
-				<ProviderJobs<T>>::remove(&provider_id);
-				Self::deposit_event(Event::JobRemoved { provider_id });
-			}
-			Ok(Pays::No.into())
-		}
 	}
 }
 
@@ -295,27 +288,23 @@ impl<T: Config> Pallet<T> {
 		for (provider_id, job) in <ProviderJobs<T> as IterableStorageMap<_, _>>::iter() {
 			let provider_id_str = str::from_utf8(&provider_id).unwrap();
 			log::info!("Execute job for provider {}", provider_id_str);
-			let response: Vec<u8>;
 			let mut is_success = true;
-			match job.method {
-				ApiMethod::Get => {
-					response = Self::send_http_get_request(job.url.clone()).unwrap_or_else(|_| {
+			let response = match job.method {
+				ApiMethod::Get =>
+					Self::send_http_get_request(job.url.clone()).unwrap_or_else(|_| {
 						is_success = false;
 						"Failed to send request".as_bytes().to_vec()
-					});
-				},
-				ApiMethod::Post => {
-					response = Self::send_http_post_request(
-						job.url.clone(),
-						job.headers.clone(),
-						job.payload.clone(),
-					)
-					.unwrap_or_else(|_| {
-						is_success = false;
-						"Failed to send request".as_bytes().to_vec()
-					});
-				},
-			}
+					}),
+				ApiMethod::Post => Self::send_http_post_request(
+					job.url.clone(),
+					job.headers.clone(),
+					job.payload.clone(),
+				)
+				.unwrap_or_else(|_| {
+					is_success = false;
+					"Failed to send request".as_bytes().to_vec()
+				}),
+			};
 
 			if !is_success {
 				log::info!("Submit failed job result for provider {}", provider_id_str);
@@ -339,7 +328,7 @@ impl<T: Config> Pallet<T> {
 			}
 		}
 
-		if results.iter().count() > 0 {
+		if !results.is_empty() {
 			Self::send_job_result(&signer, results)
 		}
 
@@ -386,10 +375,10 @@ impl<T: Config> Pallet<T> {
 		payload: Vec<u8>,
 	) -> Result<Vec<u8>, http::Error> {
 		let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
-		let mut request = http::Request::post(str::from_utf8(&url).unwrap(), vec![payload.clone()]);
+		let mut request = http::Request::post(str::from_utf8(&url).unwrap(), vec![payload]);
 		for (key, val) in headers.iter() {
-			let key_str = sp_std::str::from_utf8(&key).unwrap_or_default();
-			let val_str = sp_std::str::from_utf8(&val).unwrap_or_default();
+			let key_str = sp_std::str::from_utf8(key).unwrap_or_default();
+			let val_str = sp_std::str::from_utf8(val).unwrap_or_default();
 			request = request.add_header(key_str, val_str);
 		}
 		let pending = request.deadline(deadline).send().map_err(|_| http::Error::IoError)?;

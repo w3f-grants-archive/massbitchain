@@ -312,7 +312,7 @@ pub mod pallet {
 			let deposit = <CandidacyBond<T>>::get();
 			let new_candidate = CandidateInfo { who: who.clone(), deposit };
 			let _ = <Candidates<T>>::try_mutate(|candidates| -> Result<usize, DispatchError> {
-				if candidates.into_iter().any(|candidate| candidate.who == who) {
+				if candidates.iter_mut().any(|candidate| candidate.who == who) {
 					Err(Error::<T>::AlreadyCandidate)?
 				} else {
 					T::Currency::reserve(&who, deposit)?;
@@ -367,8 +367,8 @@ pub mod pallet {
 					if slash {
 						let slash_amount = T::SlashRatio::get() * deposit;
 						let remain = deposit - slash_amount;
-						let (imbalance, _) = T::Currency::slash_reserved(&who, slash_amount);
-						T::Currency::unreserve(&who, remain);
+						let (imbalance, _) = T::Currency::slash_reserved(who, slash_amount);
+						T::Currency::unreserve(who, remain);
 
 						if let Some(dest) = Self::slash_destination() {
 							T::Currency::resolve_creating(&dest, imbalance);
@@ -376,7 +376,7 @@ pub mod pallet {
 
 						Self::deposit_event(Event::CandidateSlashed(who.clone()));
 					} else {
-						T::Currency::unreserve(&who, deposit);
+						T::Currency::unreserve(who, deposit);
 					}
 					candidates.remove(index);
 					<LastAuthoredBlock<T>>::remove(who.clone());

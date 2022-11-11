@@ -21,13 +21,13 @@
 //! ```nocompile
 //! pub struct BeneficiaryPayout();
 //! impl BeneficiaryPayout<NegativeImbalanceOf<T>> for BeneficiaryPayout {
-//! 	fn validators(reward: NegativeImbalance) {
-//! 		Balances::resolve_creating(&VALIDATORS_POT.into_account(), reward);
-//! 	}
+//! fn validators(reward: NegativeImbalance) {
+//! Balances::resolve_creating(&VALIDATORS_POT.into_account(), reward);
+//! }
 //!
-//! 	fn providers(reward: NegativeImbalance) {
-//! 		Balances::resolve_creating(&PROVIDER_POT.into_account(), reward);
-//! 	}
+//! fn providers(reward: NegativeImbalance) {
+//! Balances::resolve_creating(&PROVIDER_POT.into_account(), reward);
+//! }
 //! }
 //! 3. Set `RewardAmount` to desired block reward value in native currency.
 
